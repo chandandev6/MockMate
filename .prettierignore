@@ -6,3 +6,6 @@ package-lock.json
 *.md
 # secrets
 .env
+
+# learning/ = study docs (HTML/PDF), app code nahi
+learning/

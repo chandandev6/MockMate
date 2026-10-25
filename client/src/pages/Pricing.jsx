@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
-import { motion } from "motion/react";
 import toast from "react-hot-toast";
-import { BsCheck2, BsCoin, BsShieldCheck } from "react-icons/bs";
+import { BsShieldCheck } from "react-icons/bs";
 import Navbar from "../components/Navbar";
 import { createOrder, getPlans, verifyPayment } from "../api/payment.api.js";
 import { setCredit } from "../redux/userSlice.js";
@@ -41,10 +40,10 @@ function Pricing() {
                 order_id: order.orderId,
                 amount: order.amount,
                 currency: order.currency,
-                name: "InterviewIQ.AI",
+                name: "MockMate",
                 description: `${plan.name} pack · ${plan.credits} credits`,
                 prefill: { name: user?.name, email: user?.email },
-                theme: { color: "#111111" },
+                theme: { color: "#0f2540" }, // brand navy
                 // payment ho gaya → server se pakka karwao (client ka "success" bharosa layak nahi)
                 handler: async (response) => {
                     try {
@@ -78,86 +77,92 @@ function Pricing() {
     };
 
     return (
-        <div className="min-h-screen bg-[#f3f3f3]">
+        <div className="min-h-screen bg-ground">
             <Navbar />
-            <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10 sm:py-14">
-                <div className="text-center mb-10">
-                    <h1 className="text-3xl sm:text-4xl font-semibold">Buy credits</h1>
-                    <p className="text-gray-500 mt-2">
-                        One interview costs {INTERVIEW_COST} credits. Credits never expire.
-                    </p>
-                    {user && (
-                        <p className="inline-flex items-center gap-1.5 mt-4 bg-green-100 px-4 py-1.5 rounded-full text-sm">
-                            Your balance: <strong>{user.credit}</strong> <BsCoin />
+            <div className="max-w-7xl mx-auto px-4 sm:px-8 py-10 sm:py-14">
+                <div className="grid lg:grid-cols-12 gap-6 items-end mb-12 animate-rise">
+                    <div className="lg:col-span-8">
+                        <p className="eyebrow mb-4">Credit packs · one-time · never expire</p>
+                        <h1 className="text-[clamp(2.75rem,1rem+5vw,5.5rem)] font-black tracking-[-0.055em] leading-[0.9]">
+                            Buy credits<span className="text-signal">.</span>
+                        </h1>
+                    </div>
+                    <div className="lg:col-span-4">
+                        <p className="text-muted leading-relaxed">
+                            One interview costs {INTERVIEW_COST} credits. Credits never expire.
                         </p>
-                    )}
+                        {user && (
+                            <p className="mt-3 font-mono text-sm">
+                                Your balance: <strong className="tabular-nums">{user.credit}</strong> credits
+                            </p>
+                        )}
+                    </div>
                 </div>
 
                 {!enabled && (
-                    <p className="max-w-xl mx-auto mb-8 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-4 text-center">
+                    <p className="mb-8 text-sm text-warn bg-warn-wash rounded-xl p-4">
                         Payments are not available right now. Please check back later.
                     </p>
                 )}
-                {error && <p className="text-center text-red-600 mb-6">{error}</p>}
+                {error && <p className="text-bad mb-6">{error}</p>}
 
-                <div className="grid md:grid-cols-3 gap-5">
+                {/* rate card — columns hairline se alag, "popular" upar laal patti */}
+                <div className="grid md:grid-cols-3 border-t border-ink">
                     {(plans ?? [null, null, null]).map((plan, index) =>
                         plan ? (
-                            <motion.div
+                            <div
                                 key={plan.id}
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: index * 0.08 }}
-                                className={`relative bg-white rounded-3xl p-6 flex flex-col border-2 ${
-                                    plan.popular ? "border-green-500 shadow-xl" : "border-gray-200"
+                                className={`relative pt-8 pb-10 md:px-8 flex flex-col ${index > 0 ? "border-t md:border-t-0 md:border-l border-line" : "md:pl-0"} ${
+                                    plan.popular ? "md:bg-paper md:rounded-b-2xl md:!px-8" : ""
                                 }`}
                             >
                                 {plan.popular && (
-                                    <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-green-600 text-white text-xs px-3 py-1 rounded-full">
-                                        Most popular
-                                    </span>
+                                    <span
+                                        className="absolute -top-px left-0 right-0 h-1 bg-signal"
+                                        aria-hidden="true"
+                                    />
                                 )}
-                                <h2 className="font-semibold text-lg">{plan.name}</h2>
-                                <p className="mt-3">
-                                    <span className="text-4xl font-bold">₹{plan.priceInr}</span>
-                                    <span className="text-gray-500 text-sm"> one-time</span>
+                                <div className="flex items-center justify-between gap-3">
+                                    <h2 className="text-2xl font-extrabold tracking-[-0.03em]">{plan.name}</h2>
+                                    {plan.popular && <span className="eyebrow !text-ink">Most popular</span>}
+                                </div>
+                                <p className="mt-6">
+                                    <span className="text-6xl font-black tracking-[-0.05em] tabular-nums">
+                                        ₹{plan.priceInr}
+                                    </span>
+                                    <span className="text-muted text-sm"> one-time</span>
                                 </p>
-                                <ul className="mt-5 space-y-2 text-sm text-gray-700 flex-1">
-                                    <li className="flex items-center gap-2">
-                                        <BsCheck2 className="text-green-600" /> {plan.credits.toLocaleString()} credits
-                                    </li>
-                                    <li className="flex items-center gap-2">
-                                        <BsCheck2 className="text-green-600" />{" "}
-                                        {Math.floor(plan.credits / INTERVIEW_COST)} interviews
-                                    </li>
-                                    <li className="flex items-center gap-2">
-                                        <BsCheck2 className="text-green-600" /> ₹
-                                        {((plan.priceInr / plan.credits) * INTERVIEW_COST).toFixed(1)} per interview
-                                    </li>
-                                </ul>
+                                <dl className="mt-8 text-sm divide-y divide-line border-y border-line flex-1">
+                                    {[
+                                        ["Credits", plan.credits.toLocaleString()],
+                                        ["Interviews", Math.floor(plan.credits / INTERVIEW_COST)],
+                                        [
+                                            "Per interview",
+                                            `₹${((plan.priceInr / plan.credits) * INTERVIEW_COST).toFixed(1)}`,
+                                        ],
+                                    ].map(([label, value]) => (
+                                        <div key={label} className="flex justify-between py-3">
+                                            <dt className="text-muted">{label}</dt>
+                                            <dd className="font-mono tabular-nums">{value}</dd>
+                                        </div>
+                                    ))}
+                                </dl>
                                 <button
                                     type="button"
                                     onClick={() => buy(plan)}
                                     disabled={!enabled || buying !== null}
-                                    className={`mt-6 py-3 rounded-xl font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                                        plan.popular
-                                            ? "bg-black text-white hover:bg-gray-800"
-                                            : "border border-gray-300 hover:bg-gray-50"
-                                    }`}
+                                    className={`btn mt-8 ${plan.popular ? "btn-signal" : "btn-line"}`}
                                 >
                                     {buying === plan.id ? "Opening payment…" : `Buy ${plan.name}`}
                                 </button>
-                            </motion.div>
+                            </div>
                         ) : (
-                            <div
-                                key={index}
-                                className="h-80 bg-white rounded-3xl border border-gray-200 animate-pulse"
-                            />
+                            <div key={index} className="h-96 m-4 bg-surface rounded-2xl animate-pulse" />
                         ),
                     )}
                 </div>
 
-                <p className="text-xs text-gray-500 text-center mt-8 flex items-center justify-center gap-1.5">
+                <p className="text-sm text-muted mt-10 flex items-center gap-2">
                     <BsShieldCheck /> Secure payments by Razorpay — UPI, cards, netbanking and wallets.
                 </p>
             </div>

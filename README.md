@@ -1,21 +1,25 @@
-# InterviewIQ.AI — AI Interview Agent
+# MockMate — AI mock interviews, out loud
 
 Practise job interviews with an AI interviewer. Sign in, upload your resume, pick a role, experience level and mode (HR / Technical / Confidence), answer questions by voice, and get a scored report with feedback.
 
-> 🚧 Work in progress. Login and the app foundation are done; the interview flow is being built. Progress is tracked in [`PRD.md`](PRD.md) (§0 Project Tracker).
+![MockMate home](docs/screenshots/home.jpg)
 
 ## ✨ Features
 
-| Status | Feature |
+| | Feature |
 |---|---|
-| ✅ | Google sign-in (Firebase) |
-| ✅ | Email + password sign-up with email verification, login, forgot/reset password |
-| ✅ | Session in an httpOnly JWT cookie (7 days), protected pages |
-| ✅ | Security basics: helmet, rate limiting, request validation (zod), env validation |
-| 🚧 | Resume upload and resume-based questions |
-| 🚧 | Live interview: AI avatar, voice questions and answers, timer |
-| 🚧 | AI answer evaluation, report + PDF, interview history and analytics |
-| 🚧 | Credits and payments |
+| 🎙️ | **Voice interview** — the AI interviewer speaks 5 questions (easy → hard) with a timer; you answer out loud. Works in every modern browser (Web Speech API, Groq Whisper + Orpheus fallback) |
+| 📄 | **Resume-aware questions** — upload a PDF and questions come from your own projects |
+| 🧭 | **3 modes** — Technical, HR, Confidence, each with its own scoring weights |
+| 📊 | **Scoring** — every answer scored 0–10 on communication, content, technical, confidence + feedback; final report out of 100 with PDF export |
+| 📈 | **History & analytics** — score trend, skill averages, weakest skill, per-mode stats |
+| 💳 | **Credits** — 500 on sign-up, 50 per interview, packs via Razorpay (race-safe, idempotent) |
+| 🔐 | **Auth** — Google (Firebase) or email + password with verification, httpOnly JWT cookie |
+| ⚙️ | **Production setup** — BullMQ job queue, Redis rate limits + cache, zod validation, 83 tests in CI, deployed on Vercel + Render |
+
+| Live interview | Report | History |
+|---|---|---|
+| ![Interview](docs/screenshots/interview.jpg) | ![Report](docs/screenshots/report.jpg) | ![History](docs/screenshots/history.jpg) |
 
 ## 🧱 Tech stack
 
@@ -24,6 +28,7 @@ Practise job interviews with an AI interviewer. Sign in, upload your resume, pic
 | Frontend (`client/`) | React 19, Vite, Tailwind CSS 4, Redux Toolkit, React Router 7, Firebase Auth, motion |
 | Backend (`server/`) | Node.js 22, Express 5 (ES modules), MongoDB + Mongoose, JWT, bcryptjs, zod, nodemailer |
 | AI | Groq (`openai/gpt-oss-120b`, very fast) or OpenRouter (`anthropic/claude-haiku-4.5`) — `AI_PROVIDER` picks |
+| Voice | Browser Web Speech API where it works well (Chrome / Edge / Safari) · Groq fallback for other browsers: Whisper (speech → text) and Orpheus (natural interviewer voice) |
 
 ## 📁 Project structure
 
@@ -88,10 +93,13 @@ cd client && npm run dev         # http://localhost:5173
 | `AI_PROVIDER` | no | `openrouter` (default) or `groq` |
 | `GROQ_API_KEY` | when `AI_PROVIDER=groq` | from console.groq.com |
 | `GROQ_MODEL` | no | `openai/gpt-oss-120b` |
+| `GROQ_WHISPER_MODEL` | no | `whisper-large-v3-turbo` — voice typing in Firefox/Brave/etc. (uses `GROQ_API_KEY`; no key → those browsers type) |
+| `GROQ_TTS_MODEL` | no | `canopylabs/orpheus-v1-english` — interviewer voice where the browser only has robotic voices (accept the model terms once in the Groq console) |
+| `GROQ_TTS_VOICE_FEMALE` / `GROQ_TTS_VOICE_MALE` | no | `hannah` / `troy` (others: autumn, diana · austin, daniel) |
 | `OPENROUTER_API_KEY` | when `AI_PROVIDER=openrouter` | from openrouter.ai |
 | `OPENROUTER_MODEL` | no | `anthropic/claude-haiku-4.5` |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` | production only | Gmail: `smtp.gmail.com`, `587`, your Gmail, a 16-char [App Password](https://myaccount.google.com/apppasswords). Empty in dev → emails are printed in the server terminal |
-| `MAIL_FROM` | no | `InterviewIQ <you@gmail.com>` |
+| `MAIL_FROM` | no | `MockMate <you@gmail.com>` |
 | `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` / `RAZORPAY_WEBHOOK_SECRET` | no | Razorpay Test Mode keys. Empty → buying credits is disabled |
 | `REDIS_URL` | **yes** | `redis://localhost:6380` (from `docker compose up -d`). Rate limits, cache and the job queue |
 | `WORKER_CONCURRENCY` | no | `10` — AI jobs one worker runs at the same time |

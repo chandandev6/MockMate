@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useDispatch } from "react-redux";
 import { useNavigate } from "react-router-dom";
-import { motion } from "motion/react";
 import { BsClockHistory, BsPlayFill } from "react-icons/bs";
 import Navbar from "../components/Navbar";
 import Analytics from "../components/history/Analytics.jsx";
@@ -15,53 +14,57 @@ const PAGE_SIZE = 9; // 3 column grid — har "Load more" par ek poori line set
 
 const FILTERS = [{ key: "", title: "All" }, ...MODES];
 
-const scoreColor = (score) => (score >= 70 ? "text-green-600" : score >= 40 ? "text-amber-600" : "text-red-600");
+const scoreColor = (score) => (score >= 70 ? "text-good" : score >= 40 ? "text-warn" : "text-bad");
 
 const STATUS_BADGE = {
-    in_progress: { text: "In progress", className: "bg-blue-50 text-blue-700" },
-    finishing: { text: "Preparing report", className: "bg-blue-50 text-blue-700" },
-    abandoned: { text: "Abandoned", className: "bg-gray-100 text-gray-500" },
+    in_progress: { text: "In progress", className: "bg-signal-wash text-ink" },
+    finishing: { text: "Preparing report", className: "bg-signal-wash text-ink" },
+    abandoned: { text: "Abandoned", className: "bg-ground text-muted" },
 };
 
-function HistoryCard({ item, onOpen }) {
+// ek interview = ek line (logbook jaisa) — date | role + mode | score / status | action
+function HistoryRow({ item, onOpen }) {
     const completed = item.status === "completed";
     const badge = STATUS_BADGE[item.status];
+    const clickable = completed || item.status === "in_progress";
     return (
-        <motion.button
-            type="button"
-            onClick={() => onOpen(item)}
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            whileHover={{ y: -3 }}
-            className="text-left bg-white rounded-2xl border border-gray-200 p-5 hover:shadow-lg transition-shadow flex flex-col"
-        >
-            <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                    <h3 className="font-semibold truncate">{item.role}</h3>
-                    <p className="text-xs text-gray-500 mt-1">
-                        {MODE_LABEL[item.mode]} · {item.experience}
-                    </p>
-                </div>
-                {completed ? (
-                    <span className={`text-2xl font-bold ${scoreColor(item.report?.overallScore ?? 0)}`}>
-                        {item.report?.overallScore ?? 0}
-                        <span className="text-xs text-gray-400 font-normal">/100</span>
-                    </span>
-                ) : (
-                    <span className={`text-xs px-2.5 py-1 rounded-full whitespace-nowrap ${badge?.className}`}>
-                        {badge?.text ?? item.status}
-                    </span>
-                )}
-            </div>
-            <div className="flex items-center justify-between mt-auto pt-5 text-xs text-gray-500">
-                <span>
+        <li className="border-b border-line">
+            <button
+                type="button"
+                onClick={() => onOpen(item)}
+                disabled={!clickable}
+                className="w-full grid grid-cols-[1fr_auto] sm:grid-cols-[7rem_1fr_7rem_8rem] items-center gap-x-4 gap-y-1 py-5 text-left group disabled:cursor-default"
+            >
+                <span className="font-mono text-xs text-muted order-3 sm:order-none">
                     {new Date(item.createdAt).toLocaleDateString(undefined, {
                         day: "numeric",
                         month: "short",
                         year: "numeric",
                     })}
                 </span>
-                <span className="font-medium text-black flex items-center gap-1">
+                <span className="min-w-0">
+                    <span className="block font-bold text-lg tracking-[-0.01em] truncate group-hover:underline underline-offset-4 group-disabled:no-underline">
+                        {item.role}
+                    </span>
+                    <span className="block text-sm text-muted">
+                        {MODE_LABEL[item.mode]} · {item.experience}
+                    </span>
+                </span>
+                <span className="sm:text-right row-span-2 sm:row-span-1">
+                    {completed ? (
+                        <span
+                            className={`text-3xl font-extrabold tabular-nums tracking-[-0.03em] ${scoreColor(item.report?.overallScore ?? 0)}`}
+                        >
+                            {item.report?.overallScore ?? 0}
+                            <span className="text-xs text-muted font-medium">/100</span>
+                        </span>
+                    ) : (
+                        <span className={`text-xs px-2.5 py-1 rounded-full whitespace-nowrap ${badge?.className}`}>
+                            {badge?.text ?? item.status}
+                        </span>
+                    )}
+                </span>
+                <span className="hidden sm:flex justify-end text-sm font-semibold items-center gap-1">
                     {completed ? (
                         "View report →"
                     ) : item.status === "in_progress" ? (
@@ -72,8 +75,8 @@ function HistoryCard({ item, onOpen }) {
                         ""
                     )}
                 </span>
-            </div>
-        </motion.button>
+            </button>
+        </li>
     );
 }
 
@@ -140,20 +143,21 @@ function History() {
     const firstLoad = loading && items.length === 0;
 
     return (
-        <div className="min-h-screen bg-[#f3f3f3]">
+        <div className="min-h-screen bg-ground">
             <Navbar />
-            <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
-                <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6">
+            <div className="max-w-7xl mx-auto px-4 sm:px-8 py-10 sm:py-14">
+                <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6 mb-10 animate-rise">
                     <div>
-                        <h1 className="text-3xl font-semibold">Interview history</h1>
-                        <p className="text-gray-500 mt-1">
-                            {pagination ? `${pagination.total} interview${pagination.total === 1 ? "" : "s"}` : " "}
+                        <p className="eyebrow mb-3">
+                            {pagination
+                                ? `${pagination.total} interview${pagination.total === 1 ? "" : "s"}`
+                                : "Your record"}
                         </p>
+                        <h1 className="text-[clamp(2.75rem,1rem+5vw,5.5rem)] font-black tracking-[-0.055em] leading-[0.9]">
+                            Interview history<span className="text-signal">.</span>
+                        </h1>
                     </div>
-                    <button
-                        onClick={() => navigate("/interview")}
-                        className="bg-black text-white px-5 py-2.5 rounded-xl text-sm hover:bg-gray-800 self-start sm:self-auto"
-                    >
+                    <button onClick={() => navigate("/interview")} className="btn btn-signal self-start sm:self-auto">
                         New interview
                     </button>
                 </div>
@@ -161,68 +165,63 @@ function History() {
                 <Analytics />
 
                 {/* mode filter */}
-                <div className="flex gap-2 overflow-x-auto pb-1 mb-6" role="tablist">
-                    {FILTERS.map((filter) => (
-                        <button
-                            key={filter.key}
-                            role="tab"
-                            aria-selected={mode === filter.key}
-                            onClick={() => changeFilter(filter.key)}
-                            className={`px-4 py-1.5 rounded-full text-sm whitespace-nowrap border transition-colors ${
-                                mode === filter.key
-                                    ? "bg-black text-white border-black"
-                                    : "bg-white border-gray-200 hover:border-gray-400"
-                            }`}
-                        >
-                            {filter.title}
-                        </button>
-                    ))}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-ink pb-3">
+                    <h2 className="text-2xl font-extrabold tracking-[-0.03em]">Sessions</h2>
+                    <div className="flex gap-1 overflow-x-auto" role="tablist">
+                        {FILTERS.map((filter) => (
+                            <button
+                                key={filter.key}
+                                role="tab"
+                                aria-selected={mode === filter.key}
+                                onClick={() => changeFilter(filter.key)}
+                                className={`px-3.5 py-1.5 rounded-full text-sm whitespace-nowrap transition-colors ${
+                                    mode === filter.key ? "bg-ink text-paper" : "text-muted hover:text-ink"
+                                }`}
+                            >
+                                {filter.title}
+                            </button>
+                        ))}
+                    </div>
                 </div>
 
                 {error && items.length === 0 ? (
                     <div className="text-center py-16">
-                        <p className="text-red-600 mb-4">{error}</p>
-                        <button onClick={retry} className="bg-black text-white px-6 py-3 rounded-xl">
+                        <p className="text-bad mb-4">{error}</p>
+                        <button onClick={retry} className="btn btn-ink">
                             Try again
                         </button>
                     </div>
                 ) : firstLoad ? (
-                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 animate-pulse">
-                        {Array.from({ length: 6 }, (_, n) => (
-                            <div key={n} className="h-36 bg-white rounded-2xl border border-gray-200" />
+                    <div className="animate-pulse">
+                        {Array.from({ length: 5 }, (_, n) => (
+                            <div key={n} className="h-20 border-b border-line flex items-center gap-6">
+                                <div className="h-3 w-20 bg-line rounded" />
+                                <div className="h-5 flex-1 max-w-xs bg-line rounded" />
+                            </div>
                         ))}
                     </div>
                 ) : items.length === 0 ? (
-                    <div className="text-center py-16 bg-white rounded-3xl border border-gray-200">
-                        <BsClockHistory size={36} className="mx-auto text-gray-300 mb-3" />
-                        <p className="font-medium">
+                    <div className="py-16">
+                        <BsClockHistory size={32} className="text-muted mb-4" />
+                        <p className="text-2xl font-bold tracking-[-0.02em]">
                             {mode ? `No ${MODE_LABEL[mode]} interviews yet` : "No interviews yet"}
                         </p>
-                        <p className="text-sm text-gray-500 mt-1 mb-5">
-                            Your finished interviews and reports show up here.
-                        </p>
-                        <button
-                            onClick={() => navigate("/interview")}
-                            className="bg-black text-white px-6 py-3 rounded-xl hover:bg-gray-800"
-                        >
+                        <p className="text-muted mt-1 mb-6">Your finished interviews and reports show up here.</p>
+                        <button onClick={() => navigate("/interview")} className="btn btn-signal">
                             Start your first interview
                         </button>
                     </div>
                 ) : (
                     <>
-                        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <ul>
                             {items.map((item) => (
-                                <HistoryCard key={item._id} item={item} onOpen={openItem} />
+                                <HistoryRow key={item._id} item={item} onOpen={openItem} />
                             ))}
-                        </div>
-                        {error && <p className="text-sm text-red-600 text-center mt-4">{error}</p>}
+                        </ul>
+                        {error && <p className="text-sm text-bad text-center mt-4">{error}</p>}
                         {(hasMore || error) && (
                             <div className="text-center mt-8">
-                                <button
-                                    onClick={error ? retry : loadMore}
-                                    disabled={loading}
-                                    className="border border-gray-300 bg-white px-6 py-2.5 rounded-xl text-sm hover:bg-gray-50 disabled:opacity-50"
-                                >
+                                <button onClick={error ? retry : loadMore} disabled={loading} className="btn btn-line">
                                     {loading ? "Loading…" : error ? "Try again" : "Load more"}
                                 </button>
                             </div>

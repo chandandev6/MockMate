@@ -42,7 +42,14 @@ function App() {
         // lazy page ki file aa rahi ho tab tak spinner
         <Suspense fallback={<PageLoader />}>
             {/* chhote notifications (answer scored, errors) — poori app me ek hi jagah */}
-            <Toaster position="top-center" />
+            <Toaster
+                position="top-center"
+                toastOptions={{
+                    // brand jaisa: navy pill, mono nahi (padhne layak)
+                    style: { background: "#0f2540", color: "#fbfcfd", borderRadius: "999px", fontSize: "14px" },
+                    success: { iconTheme: { primary: "#f75c2f", secondary: "#0f2540" } },
+                }}
+            />
             <Routes>
                 <Route path="/" element={<Home />} />
                 <Route path="/auth" element={<Auth />} />

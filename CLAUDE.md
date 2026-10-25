@@ -18,7 +18,7 @@ I am a student. I am building this project to **learn**, not just to get working
 - Step details are in `PRD.md` §10. Update §0 (step board, stage progress, work log, blockers) at the end of every session.
 
 ## 🏗️ Project
-**InterviewIQ.AI** — AI mock interview platform: Google login → upload resume + choose role/experience/mode → AI avatar asks questions by voice, user answers by voice → AI evaluates → scored report + PDF. Interviews cost credits.
+**MockMate** (formerly InterviewIQ.AI) — AI mock interview platform: Google login → upload resume + choose role/experience/mode → AI avatar asks questions by voice, user answers by voice → AI evaluates → scored report + PDF. Interviews cost credits.
 
 - `client/` — React 19 + Vite, Tailwind, Redux Toolkit, react-router, Firebase (Google popup), `motion`. Run: `npm run dev` (port 5173).
 - `server/` — Node + Express 5 (ES modules), MongoDB/Mongoose, JWT in httpOnly cookie, Firebase Admin (verifies Google ID token), OpenRouter for AI, multer (PDF in memory). Run: `npm run dev` (port 8000).

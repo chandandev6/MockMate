@@ -12,6 +12,8 @@ import interviewRouter from "./modules/interview/interview.routes.js";
 import creditRouter from "./modules/credit/credit.routes.js";
 import paymentRouter, { webhookRouter } from "./modules/payment/payment.routes.js";
 import jobRouter from "./modules/job/job.routes.js";
+import transcribeRouter from "./modules/transcribe/transcribe.routes.js";
+import ttsRouter from "./modules/tts/tts.routes.js";
 import { notFound, errorHandler } from "./middlewares/errorHandler.js";
 import { globalLimiter } from "./middlewares/rateLimit.js";
 import { requestLogger } from "./middlewares/requestLogger.js";
@@ -86,6 +88,8 @@ app.use("/api/interview", interviewRouter);
 app.use("/api/credits", creditRouter);
 app.use("/api/payment", paymentRouter);
 app.use("/api/jobs", jobRouter);
+app.use("/api/transcribe", transcribeRouter);
+app.use("/api/tts", ttsRouter);
 
 app.get("/", (req, res) => {
     return res.json({ message: "Server started" });

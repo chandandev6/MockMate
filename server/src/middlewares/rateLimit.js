@@ -66,3 +66,23 @@ export const aiLimiter = rateLimit({
     keyGenerator: (req) => req.userId ?? ipKeyGenerator(req.ip),
     message: { success: false, message: "Too many AI requests, please wait a minute" },
 });
+
+// voice → text (Whisper). aiLimiter se alag — ek answer me mic kai baar on/off ho sakta hai, wo answer ki limit na khaaye
+export const voiceLimiter = rateLimit({
+    windowMs: ONE_MINUTE,
+    limit: 20,
+    store: makeStore("voice"),
+    ...common,
+    keyGenerator: (req) => req.userId ?? ipKeyGenerator(req.ip),
+    message: { success: false, message: "Too many voice requests, please wait a minute or type your answer" },
+});
+
+// interviewer ki awaaz (Orpheus) — ek question = 1-3 tukde (sentences), "Repeat question" bhi. Alag counter
+export const ttsLimiter = rateLimit({
+    windowMs: ONE_MINUTE,
+    limit: 40,
+    store: makeStore("tts"),
+    ...common,
+    keyGenerator: (req) => req.userId ?? ipKeyGenerator(req.ip),
+    message: { success: false, message: "Too many voice requests, please wait a minute" },
+});

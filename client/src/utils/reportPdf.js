@@ -33,7 +33,7 @@ export const downloadReportPdf = async (interview) => {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(10);
     doc.setTextColor(120);
-    doc.text("AI INTERVIEW REPORT", MARGIN, 18);
+    doc.text("MOCKMATE · INTERVIEW REPORT", MARGIN, 18);
 
     doc.setFontSize(20);
     doc.setTextColor(0);
@@ -125,14 +125,15 @@ export const downloadReportPdf = async (interview) => {
         doc.text(`Page ${page} of ${pages}`, pageWidth - MARGIN, doc.internal.pageSize.getHeight() - 8, {
             align: "right",
         });
+        doc.text("MockMate - AI mock interviews", MARGIN, doc.internal.pageSize.getHeight() - 8);
     }
 
-    // "Frontend Developer" → interview-report-frontend-developer-2026-10-04.pdf
+    // "Frontend Developer" → mockmate-report-frontend-developer-2026-10-04.pdf
     const slug = clean(interview.role)
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-|-$/g, "");
     // local date (toISOString UTC deta hai — raat ko interview diya to naam me kal/parso ki date aa jaati)
     const day = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-    doc.save(`interview-report-${slug || "report"}-${day}.pdf`);
+    doc.save(`mockmate-report-${slug || "report"}-${day}.pdf`);
 };

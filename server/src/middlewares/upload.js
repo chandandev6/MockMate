@@ -20,3 +20,19 @@ const upload = multer({
 });
 
 export default upload;
+
+// mic ki recording (Firefox = ogg, Chrome/Brave = webm, Safari = mp4). 10MB ≈ 20+ min opus audio — answer se kaafi zyada
+export const audioUpload = multer({
+    storage,
+    limits: {
+        fileSize: 1024 * 1024 * 10,
+    },
+    fileFilter: function (req, file, cb) {
+        if (!file.mimetype.startsWith("audio/")) {
+            const error = new Error("Only audio recordings are allowed");
+            error.status = 400;
+            return cb(error);
+        }
+        cb(null, true);
+    },
+});

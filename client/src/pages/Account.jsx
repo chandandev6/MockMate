@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
-import { BsCoin, BsArrowUpRight, BsArrowDownRight } from "react-icons/bs";
+import { BsArrowUpRight, BsArrowDownRight } from "react-icons/bs";
 import { HiOutlineLogout } from "react-icons/hi";
 import Navbar from "../components/Navbar";
+import Avatar from "../components/ui/Avatar.jsx";
 import { getTransactions } from "../api/credit.api.js";
 import { getCurrentUser } from "../api/user.api.js";
 import { logoutUser } from "../api/auth.api.js";
@@ -66,122 +67,131 @@ function Account() {
     const hasMore = pagination && page < pagination.totalPages;
 
     return (
-        <div className="min-h-screen bg-[#f3f3f3]">
+        <div className="min-h-screen bg-ground">
             <Navbar />
-            <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-6">
-                <h1 className="text-3xl font-semibold">Account</h1>
-
-                <div className="grid sm:grid-cols-2 gap-4">
-                    {/* profile */}
-                    <div className="bg-white rounded-2xl border border-gray-200 p-5 flex items-center gap-4">
-                        <div className="w-14 h-14 shrink-0 bg-black text-white rounded-full flex items-center justify-center text-xl font-semibold">
-                            {user?.name?.slice(0, 1).toUpperCase()}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                            <p className="font-semibold truncate">{user?.name}</p>
-                            <p className="text-sm text-gray-500 truncate">{user?.email}</p>
-                        </div>
-                        <button
-                            type="button"
-                            onClick={handleLogout}
-                            className="text-sm text-red-600 hover:text-red-700 flex items-center gap-1.5 shrink-0"
-                        >
-                            <HiOutlineLogout /> Logout
-                        </button>
+            <div className="max-w-7xl mx-auto px-4 sm:px-8 py-10 sm:py-14">
+                <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6 mb-10 animate-rise">
+                    <div>
+                        <p className="eyebrow mb-3">{user?.email}</p>
+                        <h1 className="text-[clamp(2.75rem,1rem+5vw,5.5rem)] font-black tracking-[-0.055em] leading-[0.9]">
+                            Account<span className="text-signal">.</span>
+                        </h1>
                     </div>
-
-                    {/* balance */}
-                    <div className="bg-white rounded-2xl border border-gray-200 p-5 flex items-center justify-between gap-4">
-                        <div>
-                            <p className="text-sm text-gray-500">Credit balance</p>
-                            <p className="text-3xl font-semibold flex items-center gap-2 mt-1">
-                                {user?.credit ?? "–"} <BsCoin className="text-green-600 text-2xl" />
-                            </p>
-                            <p className="text-xs text-gray-500 mt-1">
-                                Enough for {Math.floor((user?.credit ?? 0) / INTERVIEW_COST)} interviews
-                            </p>
-                        </div>
-                        <button
-                            type="button"
-                            onClick={() => navigate("/pricing")}
-                            className="bg-black text-white px-4 py-2.5 rounded-xl text-sm hover:bg-gray-800 shrink-0"
-                        >
-                            Buy credits
-                        </button>
-                    </div>
+                    <button
+                        type="button"
+                        onClick={handleLogout}
+                        className="btn btn-line self-start sm:self-auto text-bad"
+                    >
+                        <HiOutlineLogout /> Logout
+                    </button>
                 </div>
 
-                {/* passbook */}
-                <div className="bg-white rounded-2xl border border-gray-200">
-                    <h2 className="font-semibold p-5 pb-3">Credit history</h2>
-                    {loading && items.length === 0 ? (
-                        <div className="px-5 pb-5 space-y-3 animate-pulse">
-                            {[0, 1, 2].map((n) => (
-                                <div key={n} className="h-12 bg-gray-100 rounded-lg" />
-                            ))}
+                <div className="grid lg:grid-cols-12 gap-8 items-start">
+                    {/* profile + balance */}
+                    <div className="lg:col-span-4 space-y-4 lg:sticky lg:top-24">
+                        <div className="bg-paper border border-line rounded-2xl p-6 flex items-center gap-4">
+                            <Avatar name={user?.name} size="lg" />
+                            <div className="min-w-0">
+                                <p className="font-bold text-lg truncate">{user?.name}</p>
+                                <p className="text-sm text-muted truncate">{user?.email}</p>
+                            </div>
                         </div>
-                    ) : error && items.length === 0 ? (
-                        <p className="px-5 pb-5 text-sm text-red-600">{error}</p>
-                    ) : items.length === 0 ? (
-                        <p className="px-5 pb-5 text-sm text-gray-500">No credit activity yet.</p>
-                    ) : (
-                        <ul>
-                            {items.map((item) => {
-                                const positive = item.amount > 0;
-                                return (
-                                    <li
-                                        key={item._id}
-                                        className="flex items-center gap-3 px-5 py-3 border-t border-gray-100"
-                                    >
-                                        <span
-                                            className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center ${
-                                                positive ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-600"
-                                            }`}
-                                        >
-                                            {positive ? <BsArrowDownRight /> : <BsArrowUpRight />}
-                                        </span>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-medium">{TYPE_LABEL[item.type] ?? item.type}</p>
-                                            <p className="text-xs text-gray-500 truncate">
-                                                {new Date(item.createdAt).toLocaleString(undefined, {
-                                                    day: "numeric",
-                                                    month: "short",
-                                                    year: "numeric",
-                                                    hour: "numeric",
-                                                    minute: "2-digit",
-                                                })}
-                                                {item.note ? ` · ${item.note}` : ""}
-                                            </p>
-                                        </div>
-                                        <div className="text-right tabular-nums">
-                                            <p
-                                                className={`text-sm font-semibold ${positive ? "text-green-700" : "text-gray-900"}`}
-                                            >
-                                                {positive ? "+" : ""}
-                                                {item.amount}
-                                            </p>
-                                            <p className="text-xs text-gray-400">Balance {item.balanceAfter}</p>
-                                        </div>
-                                    </li>
-                                );
-                            })}
-                        </ul>
-                    )}
-                    {hasMore && (
-                        <div className="p-4 border-t border-gray-100 text-center">
+                        <div className="bg-ink text-ground rounded-2xl p-6">
+                            <p className="eyebrow !text-ground/60">Credit balance</p>
+                            <p className="text-6xl font-black tracking-[-0.05em] tabular-nums mt-2">
+                                {user?.credit ?? "–"}
+                            </p>
+                            <p className="text-sm text-ground/75 mt-2">
+                                Enough for {Math.floor((user?.credit ?? 0) / INTERVIEW_COST)} interviews
+                            </p>
                             <button
                                 type="button"
-                                onClick={() => {
-                                    setLoading(true);
-                                    setPage((p) => p + 1);
-                                }}
-                                disabled={loading}
-                                className="text-sm border border-gray-300 px-5 py-2 rounded-xl hover:bg-gray-50 disabled:opacity-50"
+                                onClick={() => navigate("/pricing")}
+                                className="btn btn-signal w-full mt-6"
                             >
-                                {loading ? "Loading…" : "Load more"}
+                                Buy credits
                             </button>
                         </div>
-                    )}
+                    </div>
+
+                    {/* passbook */}
+                    <div className="lg:col-span-8">
+                        <h2 className="text-2xl font-extrabold tracking-[-0.03em] pb-3 border-b border-ink">
+                            Credit history
+                        </h2>
+                        {loading && items.length === 0 ? (
+                            <div className="animate-pulse">
+                                {[0, 1, 2].map((n) => (
+                                    <div key={n} className="h-16 border-b border-line flex items-center">
+                                        <div className="h-4 w-48 bg-line rounded" />
+                                    </div>
+                                ))}
+                            </div>
+                        ) : error && items.length === 0 ? (
+                            <p className="py-5 text-sm text-bad">{error}</p>
+                        ) : items.length === 0 ? (
+                            <p className="py-5 text-sm text-muted">No credit activity yet.</p>
+                        ) : (
+                            <ul>
+                                {items.map((item) => {
+                                    const positive = item.amount > 0;
+                                    return (
+                                        <li
+                                            key={item._id}
+                                            className="grid grid-cols-[2.25rem_1fr_auto] items-center gap-3 py-4 border-b border-line"
+                                        >
+                                            <span
+                                                className={`w-9 h-9 rounded-full flex items-center justify-center ${
+                                                    positive ? "bg-good-wash text-good" : "bg-surface text-muted"
+                                                }`}
+                                            >
+                                                {positive ? <BsArrowDownRight /> : <BsArrowUpRight />}
+                                            </span>
+                                            <div className="min-w-0">
+                                                <p className="text-sm font-semibold">
+                                                    {TYPE_LABEL[item.type] ?? item.type}
+                                                </p>
+                                                <p className="text-xs text-muted truncate">
+                                                    {new Date(item.createdAt).toLocaleString(undefined, {
+                                                        day: "numeric",
+                                                        month: "short",
+                                                        year: "numeric",
+                                                        hour: "numeric",
+                                                        minute: "2-digit",
+                                                    })}
+                                                    {item.note ? ` · ${item.note}` : ""}
+                                                </p>
+                                            </div>
+                                            <div className="text-right font-mono tabular-nums">
+                                                <p
+                                                    className={`text-sm font-medium ${positive ? "text-good" : "text-ink"}`}
+                                                >
+                                                    {positive ? "+" : ""}
+                                                    {item.amount}
+                                                </p>
+                                                <p className="text-[11px] text-muted">bal {item.balanceAfter}</p>
+                                            </div>
+                                        </li>
+                                    );
+                                })}
+                            </ul>
+                        )}
+                        {hasMore && (
+                            <div className="pt-6 text-center">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setLoading(true);
+                                        setPage((p) => p + 1);
+                                    }}
+                                    disabled={loading}
+                                    className="btn btn-line"
+                                >
+                                    {loading ? "Loading…" : "Load more"}
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>

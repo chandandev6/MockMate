@@ -9,11 +9,12 @@ import { answerEvaluated } from "../../redux/interviewSlice.js";
 import useSpeechRecognition from "../../hooks/useSpeechRecognition.js";
 import useCountdown from "../../hooks/useCountdown.js";
 import getErrorMessage from "../../utils/getErrorMessage.js";
+import LevelMeter from "../ui/LevelMeter.jsx";
 
 const DIFFICULTY_STYLE = {
-    easy: "bg-green-100 text-green-700",
-    medium: "bg-amber-100 text-amber-700",
-    hard: "bg-red-100 text-red-700",
+    easy: "bg-good-wash text-good",
+    medium: "bg-warn-wash text-warn",
+    hard: "bg-bad-wash text-bad",
 };
 
 const joinText = (current, chunk) => (current ? `${current} ${chunk}` : chunk);
@@ -130,72 +131,79 @@ function QuestionRound({ interviewId, index, total, question, speak, cancelSpeec
     const timePercent = timer.running || isAnswering ? (timer.remaining / question.timeLimitSec) * 100 : 100;
     const lowTime = isAnswering && timer.remaining <= 10;
 
+    const clock = isAnswering
+        ? `${String(Math.floor(timer.remaining / 60)).padStart(2, "0")}:${String(timer.remaining % 60).padStart(2, "0")}`
+        : `${String(Math.floor(question.timeLimitSec / 60)).padStart(2, "0")}:${String(question.timeLimitSec % 60).padStart(2, "0")}`;
+
     return (
         <div className="flex flex-col gap-4">
-            <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6">
-                <div className="flex items-center justify-between gap-2 mb-3">
-                    <span className="text-sm text-gray-500">
+            {/* question */}
+            <div className="bg-paper border border-line rounded-2xl p-6 sm:p-8">
+                <div className="flex items-center justify-between gap-2 mb-4">
+                    <span className="eyebrow">
                         Question {index + 1} of {total}
                     </span>
                     <span
-                        className={`text-xs px-2.5 py-1 rounded-full capitalize ${DIFFICULTY_STYLE[question.difficulty]}`}
+                        className={`font-mono text-[10px] tracking-widest uppercase px-2.5 py-1 rounded-full ${DIFFICULTY_STYLE[question.difficulty]}`}
                     >
                         {question.difficulty}
                     </span>
                 </div>
-                <p className="text-lg sm:text-xl font-medium leading-relaxed">{question.question}</p>
+                <p className="text-2xl sm:text-[1.75rem] font-bold leading-snug tracking-[-0.02em]">
+                    {question.question}
+                </p>
                 <button
                     type="button"
                     onClick={repeatQuestion}
                     disabled={!isAnswering}
-                    className="mt-3 text-sm text-gray-500 hover:text-black flex items-center gap-1.5 disabled:opacity-40"
+                    className="mt-5 text-sm text-muted hover:text-ink flex items-center gap-1.5 disabled:opacity-40"
                 >
                     <BsArrowRepeat /> Repeat question
                 </button>
             </div>
 
             {/* timer */}
-            <div className="bg-white rounded-2xl border border-gray-200 p-4">
-                <div className="flex justify-between text-sm mb-2">
-                    <span className="text-gray-500">
-                        {phase === "speaking" ? "Listen to the question…" : "Time left"}
-                    </span>
-                    <span className={`font-mono font-semibold ${lowTime ? "text-red-600" : ""}`}>
-                        {isAnswering
-                            ? `${Math.floor(timer.remaining / 60)}:${String(timer.remaining % 60).padStart(2, "0")}`
-                            : `${question.timeLimitSec}s`}
-                    </span>
-                </div>
-                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                    <div
-                        className={`h-full transition-all duration-300 ${lowTime ? "bg-red-500" : "bg-green-500"}`}
-                        style={{ width: `${timePercent}%` }}
-                    />
+            <div className="bg-paper border border-line rounded-2xl px-6 py-4 flex items-center gap-5">
+                <span
+                    className={`font-mono text-3xl tabular-nums tracking-tight ${lowTime ? "text-bad" : "text-ink"}`}
+                    aria-label="Time left"
+                >
+                    {clock}
+                </span>
+                <div className="flex-1">
+                    <p className="eyebrow mb-2">{phase === "speaking" ? "Listen to the question…" : "Time left"}</p>
+                    <div className="h-1.5 bg-line rounded-full overflow-hidden">
+                        <div
+                            className={`h-full transition-all duration-300 ${lowTime ? "bg-bad" : "bg-ink"}`}
+                            style={{ width: `${timePercent}%` }}
+                        />
+                    </div>
                 </div>
             </div>
 
             {/* answer */}
-            <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6">
-                <div className="flex items-center justify-between gap-2 mb-2">
-                    <label htmlFor="answer" className="text-sm font-medium">
+            <div className="bg-paper border border-line rounded-2xl p-6 sm:p-8">
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                    <label htmlFor="answer" className="text-sm font-semibold">
                         Your answer{" "}
-                        {mic.supported && <span className="text-gray-400 font-normal">(speak, or edit the text)</span>}
+                        {mic.supported && <span className="text-muted font-normal">(speak, or edit the text)</span>}
                     </label>
                     {mic.supported && (
                         <button
                             type="button"
                             onClick={() => (mic.listening ? mic.stop() : mic.start())}
-                            disabled={!isAnswering}
-                            className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-full transition-colors disabled:opacity-40 ${
+                            disabled={!isAnswering || mic.transcribing}
+                            className={`h-9 flex items-center gap-2 text-sm font-semibold px-4 rounded-full transition-colors disabled:opacity-40 ${
                                 mic.listening
-                                    ? "bg-red-100 text-red-700"
-                                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                                    ? "bg-signal text-signal-ink"
+                                    : "border border-line-strong text-ink hover:border-ink"
                             }`}
                         >
                             {mic.listening ? (
                                 <>
-                                    <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" /> <BsMic />{" "}
-                                    Listening
+                                    <span className="font-mono text-[10px] tracking-widest uppercase">On air</span>
+                                    <LevelMeter tone="signal-ink" bars={5} className="h-3.5" />
+                                    <BsMic /> {mic.live ? "Listening" : "Recording"}
                                 </>
                             ) : (
                                 <>
@@ -216,31 +224,40 @@ function QuestionRound({ interviewId, index, total, question, speak, cancelSpeec
                     placeholder={
                         phase === "speaking"
                             ? "The interviewer is asking the question…"
-                            : mic.supported
-                              ? "Start speaking — your words appear here."
-                              : "Type your answer here."
+                            : !mic.supported
+                              ? "Type your answer here."
+                              : mic.live
+                                ? "Start speaking — your words appear here."
+                                : "Start speaking — your words appear here when you turn the mic off (or submit)."
                     }
-                    className="w-full border border-gray-200 rounded-lg p-3 text-sm outline-none focus:border-black resize-y disabled:bg-gray-50"
+                    className="field resize-y leading-relaxed"
                 />
-                {mic.interim && <p className="text-sm text-gray-400 italic mt-1">{mic.interim}</p>}
-                {!mic.supported && (
-                    <p className="text-xs text-gray-500 mt-2">
-                        Voice input is not supported in this browser — please type. (Chrome or Edge support voice.)
+                {mic.interim && <p className="text-sm text-muted italic mt-2">{mic.interim}</p>}
+                {/* recording wala tareeka (Firefox, Brave...) — text server se aa raha hai */}
+                {mic.transcribing && (
+                    <p className="text-sm text-muted mt-2 flex items-center gap-2">
+                        <LevelMeter bars={5} className="h-3.5" />
+                        Converting your voice to text…
                     </p>
                 )}
-                {mic.error && <p className="text-xs text-amber-700 mt-2">{mic.error}</p>}
+                {!mic.supported && (
+                    <p className="text-xs text-muted mt-2">
+                        Voice input is not available in this browser — please type your answer.
+                    </p>
+                )}
+                {mic.error && <p className="text-xs text-warn mt-2">{mic.error}</p>}
                 {error && (
-                    <p className="text-sm text-red-600 bg-red-50 rounded-lg p-3 mt-3">
+                    <p className="text-sm text-bad bg-bad-wash rounded-lg p-3 mt-3">
                         {error} Your answer is kept — press Submit to try again.
                     </p>
                 )}
 
-                <div className="flex flex-col-reverse sm:flex-row gap-3 mt-4">
+                <div className="flex flex-col-reverse sm:flex-row gap-3 mt-5">
                     <button
                         type="button"
                         onClick={() => submit("")}
                         disabled={phase === "submitting"}
-                        className="sm:w-32 border border-gray-300 py-2.5 rounded-xl text-sm hover:bg-gray-50 disabled:opacity-40"
+                        className="btn btn-line sm:w-32"
                     >
                         Skip
                     </button>
@@ -248,11 +265,11 @@ function QuestionRound({ interviewId, index, total, question, speak, cancelSpeec
                         type="button"
                         onClick={() => submit()}
                         disabled={!(isAnswering || phase === "error")}
-                        className="flex-1 bg-black text-white py-2.5 rounded-xl text-sm font-medium hover:bg-gray-800 disabled:opacity-40 flex items-center justify-center gap-2"
+                        className="btn btn-ink flex-1"
                     >
                         {phase === "submitting" ? (
                             <>
-                                <span className="w-4 h-4 border-2 border-gray-500 border-t-white rounded-full animate-spin" />
+                                <LevelMeter tone="ground" bars={5} className="h-4" />
                                 Evaluating your answer…
                             </>
                         ) : index === total - 1 ? (

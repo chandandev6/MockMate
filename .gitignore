@@ -141,3 +141,7 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# learning PDFs: resume me personal info (phone/email) — GitHub par public nahi. Mermaid build ke time download hota hai
+learning/resume/
+learning/src/vendor/

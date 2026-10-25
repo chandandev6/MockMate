@@ -1,6 +1,6 @@
 {
   "info": {
-    "name": "InterviewIQ.AI API",
+    "name": "MockMate API",
     "description": "Full interview flow (needs the worker running: `npm run worker`): login \u2192 resume \u2192 start \u2192 5 answers \u2192 finish \u2192 report \u2192 history.\nSet `email` and `password` (a verified email/password account). Postman keeps the `token` cookie after login automatically.\nAI routes are limited to 10 requests/min per user.\nResume upload and Finish return 202 + `jobId` \u2014 run \"Job status\" until `status` is `completed`.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },

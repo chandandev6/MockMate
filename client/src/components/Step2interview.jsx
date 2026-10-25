@@ -10,6 +10,7 @@ import { clearActiveInterview } from "../utils/activeInterview.js";
 import getErrorMessage from "../utils/getErrorMessage.js";
 import { AVATARS } from "../constants/interview.js";
 import QuestionRound from "./interview/QuestionRound.jsx";
+import LevelMeter from "./ui/LevelMeter.jsx";
 
 const RETRY_EVALUATING_MS = 3000; // aakhri answer abhi check ho raha ho (409) to itni der baad dobara finish
 
@@ -78,89 +79,120 @@ function Step2interview() {
 
     const avatarVideo = AVATARS.find((item) => item.key === avatar)?.video ?? AVATARS[0].video;
 
+    const answered = Math.min(currentIndex, total);
+
     return (
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
-            {/* progress */}
-            <div className="mb-6">
-                <div className="flex justify-between text-sm text-gray-500 mb-2">
-                    <span>Interview in progress</span>
-                    <span>
-                        {Math.min(currentIndex, total)}/{total} answered
-                    </span>
+        <div className="max-w-7xl mx-auto px-4 sm:px-8 py-6 sm:py-10">
+            {/* progress — har question ek khana (studio ka channel strip) */}
+            <div className="flex flex-wrap items-end justify-between gap-4 mb-6 sm:mb-8">
+                <div>
+                    <p className="eyebrow">Live session</p>
+                    <p className="text-2xl sm:text-3xl font-extrabold tracking-[-0.03em] mt-1">
+                        {allAnswered ? "All answers in" : `Question ${currentIndex + 1} of ${total}`}
+                    </p>
                 </div>
-                <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                    <div
-                        className="h-full bg-black transition-all duration-500"
-                        style={{ width: `${(Math.min(currentIndex, total) / total) * 100}%` }}
-                    />
-                </div>
+                <ol className="flex gap-1.5" aria-label={`${answered} of ${total} answered`}>
+                    {questions.map((_, i) => (
+                        <li
+                            key={i}
+                            className={`h-8 w-10 sm:w-12 rounded-md font-mono text-[10px] flex items-center justify-center border ${
+                                i < answered
+                                    ? "bg-ink text-paper border-ink"
+                                    : i === currentIndex
+                                      ? "border-signal text-ink bg-signal-wash"
+                                      : "border-line text-muted"
+                            }`}
+                        >
+                            Q{i + 1}
+                        </li>
+                    ))}
+                </ol>
             </div>
 
-            <div className="grid md:grid-cols-5 gap-6">
-                {/* avatar */}
-                <div className="md:col-span-2">
-                    <div className="bg-white rounded-2xl border border-gray-200 p-3 md:sticky md:top-6">
-                        <video
-                            ref={videoRef}
-                            src={avatarVideo}
-                            muted
-                            loop
-                            playsInline
-                            preload="auto"
-                            className="w-full aspect-square md:aspect-[4/5] object-cover rounded-xl bg-gray-100"
-                        />
-                        <div className="flex items-center justify-between px-1 pt-3">
-                            <span className="text-sm font-medium">AI Interviewer</span>
-                            <span
-                                className={`text-xs flex items-center gap-1.5 ${tts.speaking ? "text-green-600" : "text-gray-400"}`}
-                            >
+            <div className="grid lg:grid-cols-12 gap-6 lg:gap-8">
+                {/* interviewer — studio monitor jaisa frame */}
+                <div className="lg:col-span-5">
+                    <div className="bg-ink rounded-2xl p-3 lg:sticky lg:top-24">
+                        <div className="relative">
+                            <video
+                                ref={videoRef}
+                                src={avatarVideo}
+                                muted
+                                loop
+                                playsInline
+                                preload="auto"
+                                className="w-full aspect-[4/3] lg:aspect-[4/5] object-cover rounded-xl bg-ink-soft"
+                            />
+                            {/* viewfinder ke kone */}
+                            {[
+                                "top-3 left-3 border-t-2 border-l-2",
+                                "top-3 right-3 border-t-2 border-r-2",
+                                "bottom-3 left-3 border-b-2 border-l-2",
+                                "bottom-3 right-3 border-b-2 border-r-2",
+                            ].map((corner) => (
                                 <span
-                                    className={`w-2 h-2 rounded-full ${tts.speaking ? "bg-green-500 animate-pulse" : "bg-gray-300"}`}
+                                    key={corner}
+                                    aria-hidden="true"
+                                    className={`absolute w-5 h-5 border-paper/70 ${corner}`}
                                 />
-                                {tts.speaking ? "Speaking" : "Listening"}
+                            ))}
+                            <span className="absolute top-5 left-6 font-mono text-[10px] tracking-widest uppercase text-paper/80">
+                                Cam 01
                             </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3 px-2 pt-3 pb-1 text-paper">
+                            <div>
+                                <p className="text-sm font-semibold">AI Interviewer</p>
+                                <p className="font-mono text-[10px] tracking-widest uppercase text-paper/60 mt-0.5">
+                                    {tts.speaking ? "Speaking" : "Listening"}
+                                </p>
+                            </div>
+                            <LevelMeter tone="ground" active={tts.speaking} bars={14} className="h-7" />
                         </div>
                     </div>
                 </div>
 
                 {/* question / finishing */}
-                <div className="md:col-span-3">
+                <div className="lg:col-span-7">
                     {resumed && !allAnswered ? (
                         // refresh ke baad — browser bina click ke awaaz/mic shuru nahi karne deta
-                        <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center">
-                            <h2 className="text-xl font-semibold mb-2">Welcome back</h2>
-                            <p className="text-gray-500 mb-6">
+                        <div className="bg-paper border border-line rounded-2xl p-8 sm:p-10">
+                            <p className="eyebrow mb-3">Session saved</p>
+                            <h2 className="text-3xl font-extrabold tracking-[-0.03em] mb-2">Welcome back</h2>
+                            <p className="text-muted mb-6">
                                 Your interview is saved. You are on question {currentIndex + 1} of {total}.
                             </p>
                             <button
                                 type="button"
                                 onClick={() => dispatch(resumeConfirmed())}
-                                className="bg-black text-white px-6 py-3 rounded-xl inline-flex items-center gap-2 hover:bg-gray-800"
+                                className="btn btn-signal"
                             >
                                 <BsPlayFill /> Continue interview
                             </button>
                         </div>
                     ) : allAnswered ? (
-                        <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center">
+                        <div className="bg-paper border border-line rounded-2xl p-8 sm:p-10">
                             {finishError ? (
                                 <>
-                                    <p className="text-red-600 mb-4">{finishError}</p>
+                                    <p className="text-bad mb-4">{finishError}</p>
                                     <button
                                         type="button"
                                         onClick={() => {
                                             setFinishError("");
                                             setFinishAttempt((n) => n + 1);
                                         }}
-                                        className="bg-black text-white px-6 py-3 rounded-xl hover:bg-gray-800"
+                                        className="btn btn-ink"
                                     >
                                         Try again
                                     </button>
                                 </>
                             ) : (
                                 <>
-                                    <span className="inline-block w-10 h-10 border-4 border-gray-200 border-t-black rounded-full animate-spin mb-4" />
-                                    <h2 className="text-xl font-semibold">Preparing your report…</h2>
-                                    <p className="text-gray-500 mt-1">
+                                    <LevelMeter className="h-10 mb-6" bars={12} />
+                                    <h2 className="text-3xl font-extrabold tracking-[-0.03em]">
+                                        Preparing your report…
+                                    </h2>
+                                    <p className="text-muted mt-2">
                                         The AI is reviewing all your answers (up to 30 s).
                                     </p>
                                 </>

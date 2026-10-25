@@ -40,7 +40,7 @@ function Interviewpage() {
     if (restoring) return <PageLoader />;
 
     return (
-        <div className="min-h-screen bg-[#f3f3f3]">
+        <div className="min-h-screen bg-ground">
             <Navbar />
             {status === "in_progress" ? <Step2interview /> : <Step1setup />}
         </div>

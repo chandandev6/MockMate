@@ -24,6 +24,13 @@ const envSchema = z
         // console.groq.com → API Keys. Sirf AI_PROVIDER=groq me zaruri (neeche superRefine)
         GROQ_API_KEY: z.string().optional(),
         GROQ_MODEL: z.string().default("openai/gpt-oss-120b"),
+        // voice → text (Firefox/Brave jaise browsers jinme apna speech API nahi). Isi GROQ_API_KEY se chalta hai
+        GROQ_WHISPER_MODEL: z.string().default("whisper-large-v3-turbo"),
+        // AI interviewer ki awaaz un browsers ke liye jinke paas sirf robotic voice hai (Linux Firefox/Brave = eSpeak).
+        // Orpheus pehli baar use karne se pehle Groq console me terms accept karne padte hai
+        GROQ_TTS_MODEL: z.string().default("canopylabs/orpheus-v1-english"),
+        GROQ_TTS_VOICE_FEMALE: z.string().default("hannah"),
+        GROQ_TTS_VOICE_MALE: z.string().default("troy"),
 
         // sirf AI_PROVIDER=openrouter me zaruri (neeche superRefine)
         OPENROUTER_API_KEY: z.string().optional(),
@@ -44,7 +51,7 @@ const envSchema = z
         SMTP_PORT: z.coerce.number().int().positive().default(587),
         SMTP_USER: z.string().optional(),
         SMTP_PASS: z.string().optional(),
-        MAIL_FROM: z.string().optional(), // e.g. "InterviewIQ <yourmail@gmail.com>" — na ho to SMTP_USER
+        MAIL_FROM: z.string().optional(), // e.g. "MockMate <yourmail@gmail.com>" — na ho to SMTP_USER
 
         // Razorpay (credits kharidna). Dashboard → Test Mode → API Keys. Na ho to payments band (baaki app chalta hai)
         RAZORPAY_KEY_ID: z.string().optional(),

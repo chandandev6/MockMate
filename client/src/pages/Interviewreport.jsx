@@ -31,8 +31,8 @@ function Interviewreport() {
     if (error) {
         content = (
             <div className="max-w-md mx-auto text-center py-24 px-4">
-                <p className="text-red-600 mb-4">{error}</p>
-                <button onClick={() => navigate("/interview")} className="bg-black text-white px-6 py-3 rounded-xl">
+                <p className="text-bad mb-4">{error}</p>
+                <button onClick={() => navigate("/interview")} className="btn btn-ink">
                     Start an interview
                 </button>
             </div>
@@ -40,11 +40,12 @@ function Interviewreport() {
     } else if (!interview) {
         // skeleton — layout jaisa hi, taaki data aane par page "kude" nahi
         content = (
-            <div className="max-w-5xl mx-auto px-4 sm:px-6 py-12 space-y-6 animate-pulse">
-                <div className="h-56 bg-white rounded-3xl border border-gray-200" />
-                <div className="grid md:grid-cols-3 gap-4">
-                    {[0, 1, 2].map((n) => (
-                        <div key={n} className="h-40 bg-white rounded-2xl border border-gray-200" />
+            <div className="max-w-7xl mx-auto px-4 sm:px-8 py-14 space-y-6 animate-pulse">
+                <div className="h-4 w-64 bg-line rounded" />
+                <div className="h-20 w-2/3 bg-line rounded-xl" />
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 pt-8">
+                    {[0, 1, 2, 3].map((n) => (
+                        <div key={n} className="h-28 bg-surface rounded-xl border border-line" />
                     ))}
                 </div>
             </div>
@@ -52,8 +53,8 @@ function Interviewreport() {
     } else if (interview.status !== "completed" || !interview.report) {
         content = (
             <div className="max-w-md mx-auto text-center py-24 px-4">
-                <p className="text-gray-600 mb-4">This interview is not finished yet, so there is no report.</p>
-                <button onClick={() => navigate("/interview")} className="bg-black text-white px-6 py-3 rounded-xl">
+                <p className="text-muted mb-4">This interview is not finished yet, so there is no report.</p>
+                <button onClick={() => navigate("/interview")} className="btn btn-ink">
                     Go to interview
                 </button>
             </div>
@@ -63,7 +64,7 @@ function Interviewreport() {
     }
 
     return (
-        <div className="min-h-screen bg-[#f3f3f3]">
+        <div className="min-h-screen bg-ground">
             <Navbar />
             {content}
         </div>

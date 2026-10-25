@@ -12,7 +12,7 @@ function Authmodel({ onClose }) {
     }, [userData, onClose]);
 
     return (
-        <div className="fixed inset-0 bg-black/10 flex justify-center items-center z-[999] backdrop-blur-sm px-6 py-20">
+        <div className="fixed inset-0 bg-ink/40 flex justify-center items-center z-[999] backdrop-blur-sm px-4 py-10 overflow-y-auto">
             {/* onClose is now passed straight through to Auth, which owns
                 its own close button positioned against its own card —
                 no more separate wrapper trying to guess the card's edges */}

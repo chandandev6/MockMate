@@ -1,0 +1,1166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>MockMate — Feature Guide</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- ============================ COVER ============================ -->
+<section class="cover">
+    <span class="tag">Study guide · 02 of 03</span>
+    <h1>MockMate<br />Feature by Feature</h1>
+    <p class="sub">Nineteen features, one chapter each. For every feature: what it does and why, the files involved,
+        a flow diagram, the real code, the edge cases it handles, how to test it yourself, and how to explain it in
+        an interview.</p>
+    <div class="chips">
+        <span>Auth</span><span>Resume parsing</span><span>Start + credits</span><span>Voice</span>
+        <span>Scoring</span><span>Report</span><span>History</span><span>Payments</span><span>Queue</span>
+        <span>Redis</span><span>Logging</span><span>Tests</span><span>Deploy</span>
+    </div>
+    <div class="meta">
+        <div><b>Read first</b>01 Main Guide (big picture)</div>
+        <div><b>Then</b>03 Interview Questions</div>
+        <div><b>Code</b>github.com/chandandev6/Ai_interview_Agent</div>
+        <div><b>Tip</b>Keep the code open next to this PDF</div>
+    </div>
+</section>
+
+<!-- ============================ TOC ============================ -->
+<section class="toc">
+    <h1>Contents</h1>
+    <ol>
+        <li><span class="n">F1</span>Google sign-in<span class="d">Firebase ID token → JWT cookie</span></li>
+        <li><span class="n">F2</span>Email + password accounts<span class="d">bcrypt, verify link, forgot password</span></li>
+        <li><span class="n">F3</span>Staying logged in (client session)<span class="d">current-user, ProtectedRoute, 401</span></li>
+        <li><span class="n">F4</span>Resume upload and parsing<span class="d">multer, pdf-parse, background job</span></li>
+        <li><span class="n">F5</span>Starting an interview<span class="d">idempotency, credits, AI questions</span></li>
+        <li><span class="n">F6</span>Voice: speaking and listening<span class="d">browser first, Groq fallback</span></li>
+        <li><span class="n">F7</span>The live interview round<span class="d">phases, timer, refresh-safe</span></li>
+        <li><span class="n">F8</span>Answer evaluation<span class="d">claim-first, rubric, scores</span></li>
+        <li><span class="n">F9</span>Finish and the report<span class="d">job, weighted score, AI summary</span></li>
+        <li><span class="n">F10</span>Report page and PDF export<span class="d">Step3report, jspdf</span></li>
+        <li><span class="n">F11</span>History and analytics<span class="d">pagination, $facet, cache</span></li>
+        <li><span class="n">F12</span>Credits ledger<span class="d">transactions, passbook</span></li>
+        <li><span class="n">F13</span>Payments with Razorpay<span class="d">order, verify, webhook</span></li>
+        <li><span class="n">F14</span>The AI client<span class="d">providers, prompts, retries</span></li>
+        <li><span class="n">F15</span>Background queue and cleanup<span class="d">BullMQ, locks, self-healing</span></li>
+        <li><span class="n">F16</span>Redis: rate limits and cache<span class="d">fail open</span></li>
+        <li><span class="n">F17</span>Config, validation and errors<span class="d">env.js, validate(), AppError</span></li>
+        <li><span class="n">F18</span>Logging, monitoring, health<span class="d">pino, request IDs, /ready</span></li>
+        <li><span class="n">F19</span>Tests, CI and deployment<span class="d">Vitest, Actions, Vercel, Render</span></li>
+    </ol>
+</section>
+
+<!-- ======================================================= F1 ======================================================= -->
+<h1><span class="num">F1</span>Google sign-in</h1>
+<p class="lead">One click "Continue with Google". The browser gets a signed token from Google (via Firebase), our
+    server checks that token, and then gives the browser <i>our own</i> session cookie.</p>
+
+<h2>Why it is built this way</h2>
+<p>The browser could just send "my email is x@gmail.com" — but anyone can send that. A <b>Firebase ID token</b> is
+    signed by Google. Our server verifies the signature with Firebase Admin, so the email inside is trustworthy.
+    After that we stop using Firebase and issue our own JWT, so the rest of the app doesn't care how you logged in.</p>
+
+<h2>Files</h2>
+<table>
+    <tr><th style="width:42%">File</th><th>Role</th></tr>
+    <tr><td><code>client/src/utils/firebase.js</code></td><td>Firebase app + <code>GoogleAuthProvider</code></td></tr>
+    <tr><td><code>client/src/pages/Auth.jsx</code></td><td><code>signInWithPopup</code> → <code>getIdToken()</code> → <code>googleLogin(idToken)</code></td></tr>
+    <tr><td><code>server/src/config/firebaseAdmin.js</code></td><td>Firebase Admin with only the project id (enough to verify tokens)</td></tr>
+    <tr><td><code>server/src/modules/auth/auth.service.js</code></td><td><code>loginWithGoogle</code>: verify token, require verified email</td></tr>
+    <tr><td><code>server/src/modules/user/user.service.js</code></td><td><code>findOrCreateGoogleUser</code></td></tr>
+    <tr><td><code>server/src/modules/auth/auth.controller.js</code></td><td><code>setAuthCookie</code>: JWT in an httpOnly cookie for 7 days</td></tr>
+</table>
+
+<figure>
+<div class="mermaid">
+sequenceDiagram
+    participant U as User
+    participant B as Browser
+    participant G as Google / Firebase
+    participant A as Our API
+    participant M as MongoDB
+    U->>B: click "Continue with Google"
+    B->>G: signInWithPopup
+    G-->>B: Firebase user + signed ID token
+    B->>A: POST /api/auth/google { idToken }
+    A->>G: verifyIdToken (check signature)
+    G-->>A: { email, email_verified, name }
+    A->>M: find user by email, or create (500 credits + ledger row)
+    A-->>B: Set-Cookie token=JWT (httpOnly) + { user }
+    Note over B: Redux setUserData(user)
+</div>
+<figcaption>Figure F1.1 — Google login. After this, only our cookie matters.</figcaption>
+</figure>
+
+<h2>The code</h2>
+<span class="file">server/src/modules/auth/auth.service.js</span>
+<pre><code><span class="k">export const</span> loginWithGoogle = <span class="k">async</span> (idToken) => {
+    <span class="k">let</span> decoded;
+    <span class="k">try</span> {
+        decoded = <span class="k">await</span> firebaseAuth.verifyIdToken(idToken);
+    } <span class="k">catch</span> {
+        <span class="k">throw new</span> AppError(401, <span class="s">"Invalid Google token"</span>);
+    }
+    <span class="k">if</span> (!decoded.email || !decoded.email_verified) {
+        <span class="k">throw new</span> AppError(401, <span class="s">"Google account email not verified"</span>);
+    }
+    <span class="k">return</span> findOrCreateGoogleUser({
+        email: decoded.email.toLowerCase(),
+        name: decoded.name || decoded.email.split(<span class="s">"@"</span>)[0],
+    });
+};</code></pre>
+
+<span class="file">server/src/modules/auth/auth.controller.js + config/cookie.js</span>
+<pre><code><span class="k">const</span> setAuthCookie = (res, user) => {
+    res.cookie(<span class="s">"token"</span>, genToken(user._id), { ...cookieOptions, maxAge: SEVEN_DAYS });
+};
+<span class="c">// cookieOptions: httpOnly: true, secure: isProd, sameSite: isProd ? "none" : "strict"</span></code></pre>
+
+<h2>Edge cases handled</h2>
+<table>
+    <tr><th style="width:40%">Situation</th><th>What happens</th></tr>
+    <tr><td>Token is fake / expired</td><td><code>verifyIdToken</code> throws → 401 "Invalid Google token".</td></tr>
+    <tr><td>Google email not verified</td><td>401 — we only accept verified emails.</td></tr>
+    <tr><td>Email exists as an <b>unverified</b> password account</td><td>Could be an attacker who registered your email. The real owner just proved ownership with Google → we mark verified and <b>delete the unverified password</b>, so the attacker can't log in.</td></tr>
+    <tr><td>Brand-new user</td><td>Created with <code>isVerified: true</code>, default 500 credits, and a <code>signup_bonus</code> ledger row.</td></tr>
+    <tr><td>Email casing <code>Abc@Gmail.com</code></td><td>Lower-cased everywhere; the schema also lowercases.</td></tr>
+</table>
+
+<div class="box tip"><span class="label">Test it yourself</span>
+    <p>Log in with Google, then open DevTools → Application → Cookies: you'll see <code>token</code> with
+        <b>HttpOnly ✓</b>. In the console, <code>document.cookie</code> will <i>not</i> show it — that's the point.</p>
+</div>
+<div class="box say"><span class="label">Say it in an interview</span>
+    <p>"The client uses Firebase only for the Google popup. It sends the Firebase ID token to my server, which
+        verifies the signature with Firebase Admin and requires a verified email. Then I issue my own JWT in an
+        httpOnly cookie, so the rest of the app has one session mechanism for both Google and password users."</p>
+</div>
+
+<!-- ======================================================= F2 ======================================================= -->
+<h1><span class="num">F2</span>Email + password accounts</h1>
+<p class="lead">Register → verify email → log in. Plus "forgot password". Built by hand with bcrypt and random
+    link tokens (not Firebase), to learn how it works.</p>
+
+<h2>Endpoints</h2>
+<table>
+    <tr><th style="width:38%">Endpoint</th><th>What it does</th><th style="width:20%">Limiter</th></tr>
+    <tr><td><span class="pill post">POST</span><code>/api/auth/register</code></td><td>Create account (unverified), email a link. No login yet.</td><td>auth 10/15 min</td></tr>
+    <tr><td><span class="pill post">POST</span><code>/api/auth/verify-email</code></td><td>Token from the link → verified → logged in (cookie).</td><td>—</td></tr>
+    <tr><td><span class="pill post">POST</span><code>/api/auth/login</code></td><td>Email + password → cookie. Unverified → 403 <code>EMAIL_NOT_VERIFIED</code>.</td><td>auth</td></tr>
+    <tr><td><span class="pill post">POST</span><code>/api/auth/resend-verification</code></td><td>New link (always the same reply).</td><td>auth</td></tr>
+    <tr><td><span class="pill post">POST</span><code>/api/auth/forgot-password</code></td><td>Reset link by email (always the same reply).</td><td>auth</td></tr>
+    <tr><td><span class="pill post">POST</span><code>/api/auth/reset-password</code></td><td>Token + new password → logged in.</td><td>auth</td></tr>
+    <tr><td><span class="pill post">POST</span><code>/api/auth/logout</code></td><td>Clear the cookie.</td><td>—</td></tr>
+</table>
+
+<figure class="mid">
+<div class="mermaid">
+flowchart TB
+    R["Register<br/>name, email, password (8–72)"] --> H["bcrypt.hash(password, 12)"]
+    H --> T["token = randomBytes(32).hex<br/>DB stores sha256(token), expires in 24 h"]
+    T --> E["Email link<br/>/verify-email?token=…"]
+    E --> V["Click → POST /verify-email<br/>find user by sha256(token), not expired"]
+    V --> OK["isVerified = true · token removed (single use)<br/>cookie set → logged in"]
+    L["Login"] --> C["bcrypt.compare<br/>(dummy hash if no user)"]
+    C -- "wrong" --> X401(["401 Invalid email or password"])
+    C -- "right but unverified" --> X403(["403 EMAIL_NOT_VERIFIED"])
+    C -- "right + verified" --> OK2(["cookie set"])
+</div>
+<figcaption>Figure F2.1 — Register/verify and login.</figcaption>
+</figure>
+
+<h2>The important code</h2>
+<span class="file">server/src/modules/auth/auth.service.js</span>
+<pre><code><span class="k">const</span> BCRYPT_ROUNDS = 12; <span class="c">// ~0.2 s per hash — fine for a user, very slow for an attacker</span>
+<span class="k">const</span> DUMMY_HASH = bcrypt.hashSync(<span class="s">"dummy-password-for-timing"</span>, BCRYPT_ROUNDS);
+<span class="k">const</span> hashToken = (token) => crypto.createHash(<span class="s">"sha256"</span>).update(token).digest(<span class="s">"hex"</span>);
+
+<span class="k">export const</span> loginWithPassword = <span class="k">async</span> ({ email, password }) => {
+    <span class="k">const</span> user = <span class="k">await</span> User.findOne({ email }).select(<span class="s">"+password"</span>);
+    <span class="c">// no user? still run a compare, so the response time doesn't reveal it</span>
+    <span class="k">const</span> isMatch = <span class="k">await</span> bcrypt.compare(password, user?.password || DUMMY_HASH);
+    <span class="k">if</span> (!user || !user.password || !isMatch) <span class="k">throw new</span> AppError(401, <span class="s">"Invalid email or password"</span>);
+    <span class="c">// only AFTER the right password do we reveal "not verified"</span>
+    <span class="k">if</span> (!user.isVerified) <span class="k">throw new</span> AppError(403, <span class="s">"Please verify your email first..."</span>, <span class="s">"EMAIL_NOT_VERIFIED"</span>);
+    <span class="k">return</span> toSafeUser(user);
+};</code></pre>
+
+<h2>Security ideas in this feature</h2>
+<div class="grid2">
+<div class="card"><h4>Hash the link token</h4><p class="small">The email contains the plain token; the DB stores only
+    its SHA-256. If the database leaks, nobody can build a working link. SHA-256 (fast) is fine here because the
+    token is 256 random bits — impossible to guess, unlike a password.</p></div>
+<div class="card"><h4>No account enumeration</h4><p class="small">Same message for unknown email and wrong password;
+    dummy bcrypt compare; forgot-password always answers "if an account exists…" and sends the email
+    <b>without await</b> (SMTP takes ~1 s — waiting only for real users would leak by timing).</p></div>
+<div class="card"><h4>Single use + expiry</h4><p class="small">Verify links last 24 h, reset links 1 h. After use the
+    token fields are removed, so the same link can't be used twice.</p></div>
+<div class="card"><h4>Secret fields hidden</h4><p class="small"><code>password</code> and tokens have
+    <code>select: false</code>; <code>toSafeUser()</code> strips them before any response.</p></div>
+</div>
+
+<h2>Edge cases</h2>
+<table>
+    <tr><th style="width:42%">Situation</th><th>Result</th></tr>
+    <tr><td>Register with an email that is a Google-only account</td><td>409 with a hint: use Google, or "Forgot password" to set one.</td></tr>
+    <tr><td>Register again before verifying</td><td>Allowed: new name/password, new link. Only the real inbox owner can verify.</td></tr>
+    <tr><td>Two registrations at the same moment</td><td>Unique email index → second gets E11000 → 409.</td></tr>
+    <tr><td>Password longer than 72 chars</td><td>Rejected (bcrypt silently ignores bytes after 72).</td></tr>
+    <tr><td>Reset link used</td><td>Sets password, marks email verified (clicking the email proves ownership), logs in.</td></tr>
+    <tr><td>Email can't be sent (SMTP down)</td><td>Register → 502 with "try Resend in a minute".</td></tr>
+</table>
+
+<div class="box warn"><span class="label">Known gap (written in the PRD)</span>
+    <p>Resetting the password doesn't log out other devices: a JWT stays valid until it expires (7 days). Fix
+        later with a <code>tokenVersion</code> on the user that <code>isAuth</code> checks.</p>
+</div>
+<div class="box say"><span class="label">Say it in an interview</span>
+    <p>"Passwords are hashed with bcrypt at cost 12. Verification and reset links use 32 random bytes; only the
+        SHA-256 hash is stored, links are single-use and expire. I avoid user enumeration with identical messages
+        and a dummy bcrypt compare so timing is the same."</p>
+</div>
+
+<!-- ======================================================= F3 ======================================================= -->
+<h1><span class="num">F3</span>Staying logged in (client session)</h1>
+<p class="lead">The JWT cookie is invisible to JavaScript, so how does React know who is logged in? It asks the
+    server once when the app opens.</p>
+
+<figure>
+<div class="mermaid">
+flowchart TB
+    O["App opens · Redux user.loading = true"] --> Q["GET /api/user/current-user<br/>(cookie sent automatically)"]
+    Q -- "200 user" --> S["setUserData(user) · loading = false"]
+    Q -- "401" --> F["finishLoading() · loading = false, user = null"]
+    S --> P{"ProtectedRoute"}
+    F --> P
+    P -- "loading" --> SP["spinner (don't decide yet)"]
+    P -- "user" --> PG["show the page"]
+    P -- "no user, clicked logout" --> HM["go to /"]
+    P -- "no user" --> AU["go to /auth, remember 'from'"]
+</div>
+<figcaption>Figure F3.1 — Session on the client.</figcaption>
+</figure>
+
+<h2>Three small details that fix real bugs</h2>
+<ol>
+    <li><b><code>loading: true</code> at start.</b> Without it, on refresh the user is <code>null</code> for a
+        moment and ProtectedRoute would kick a logged-in user to the login page.</li>
+    <li><b>App.jsx does not dispatch <code>null</code> on 401.</b> If that slow response arrived <i>after</i> the
+        user just logged in, it would log them out again (race). It only calls <code>finishLoading()</code>.</li>
+    <li><b>The 401 interceptor ignores <code>/api/auth/*</code> and current-user.</b> A wrong password (401) is not
+        "session expired". For other calls, a 401 clears the user and ProtectedRoute sends them to login.</li>
+</ol>
+
+<span class="file">client/src/api/axios.js</span>
+<pre><code><span class="k">const</span> api = axios.create({ baseURL: serverUrl, withCredentials: <span class="k">true</span> });
+<span class="k">const</span> IGNORE_401 = [<span class="s">"/api/auth/"</span>, <span class="s">"/api/user/current-user"</span>];
+
+api.interceptors.response.use((response) => response, (error) => {
+    <span class="k">const</span> url = error.config?.url || <span class="s">""</span>;
+    <span class="k">const</span> isSessionExpired = error.response?.status === 401 && !IGNORE_401.some((p) => url.startsWith(p));
+    <span class="k">if</span> (isSessionExpired && store.getState().user.userData) store.dispatch(setUserData(<span class="k">null</span>));
+    <span class="k">return</span> Promise.reject(error); <span class="c">// the component's catch still runs</span>
+});</code></pre>
+
+<p>On the server, <code>GET /api/user/current-user</code> is cached in Redis for 60 s (it runs on every page load).
+    Whenever credits or verification change, the cache key is deleted so the next call is fresh.</p>
+<div class="box why"><span class="label">ProtectedRoute is only UX</span>
+    <p>Hiding a page in React is not security — anyone can call the API directly. Real protection is
+        <code>isAuth</code> on the server plus <code>userId</code> in every query.</p>
+</div>
+
+<!-- ======================================================= F4 ======================================================= -->
+<h1><span class="num">F4</span>Resume upload and parsing</h1>
+<p class="lead">Optional. The user drops a PDF; the AI extracts skills, projects and an experience summary, which
+    later make the questions personal ("Tell me about the caching in your Drishti project").</p>
+
+<figure class="mid">
+<div class="mermaid">
+sequenceDiagram
+    participant B as Browser
+    participant A as API
+    participant Q as Redis queue
+    participant W as Worker
+    participant L as LLM
+    Note over B: check: PDF and ≤ 5 MB
+    B->>A: POST /api/interview/resume (FormData "resume")
+    Note over A: isAuth → aiLimiter → multer (RAM, PDF only, 5 MB)
+    Note over A: pdf-parse first 5 pages → clean text
+    alt unreadable or under 50 chars
+        A-->>B: 400 INVALID_PDF / RESUME_NO_TEXT
+    end
+    A->>Q: lock + add "parse-resume" { text ≤ 12,000 chars }
+    A-->>B: 202 { jobId }
+    W->>L: resumePrompt(text)
+    L-->>W: { skills, projects, experienceSummary }
+    Note over W: zod resumeAiSchema (trim lists)
+    loop every 2 s
+        B->>A: GET /api/jobs/:jobId
+    end
+    A-->>B: completed { resume }
+    Note over B: show chips · keep resume in state for Start
+</div>
+<figcaption>Figure F4.1 — Fast checks in the API, slow AI in the worker.</figcaption>
+</figure>
+
+<h2>Why split it like this</h2>
+<ul>
+    <li><b>PDF → text in the API</b> takes milliseconds and lets a bad file fail <i>immediately</i> with a clear
+        400. The <code>mimetype</code> is just a label from the browser; the real check is "can pdf-parse read
+        it?".</li>
+    <li><b>Only text goes to Redis</b> (max 12,000 chars), not a 5 MB PDF — Redis memory is small.</li>
+    <li><b>Nothing is stored except the AI summary</b> — the PDF and full text are thrown away (privacy, small
+        documents). The summary is saved inside the interview when it starts.</li>
+    <li><b>The AI's reply is untrusted</b>: <code>resumeAiSchema</code> keeps at most 20 skills and 5 projects and
+        limits string lengths.</li>
+</ul>
+
+<span class="file">server/src/modules/interview/interview.service.js</span>
+<pre><code><span class="k">const</span> RESUME_MAX_PAGES = 5;      <span class="c">// a 300-page PDF must not keep the server busy</span>
+<span class="k">const</span> RESUME_MAX_CHARS = 12000;  <span class="c">// more text = more tokens = more cost and time</span>
+<span class="k">const</span> RESUME_MIN_CHARS = 50;     <span class="c">// less = probably a scanned image, no text layer</span>
+
+<span class="k">export const</span> requestResumeParse = <span class="k">async</span> (userId, buffer) => {
+    <span class="k">const</span> text = <span class="k">await</span> extractPdfText(buffer);  <span class="c">// throws 400 INVALID_PDF</span>
+    <span class="k">if</span> (text.length &lt; RESUME_MIN_CHARS) <span class="k">throw new</span> AppError(400, <span class="s">"No text found in this PDF..."</span>, <span class="s">"RESUME_NO_TEXT"</span>);
+    <span class="k">const</span> jobId = <span class="k">await</span> enqueueAiJob(JOB.PARSE_RESUME, userId, { text: text.slice(0, RESUME_MAX_CHARS) });
+    <span class="k">return</span> { jobId };
+};</code></pre>
+
+<table>
+    <tr><th style="width:42%">Edge case</th><th>Result</th></tr>
+    <tr><td>No file / wrong field name</td><td>400 <code>RESUME_MISSING</code></td></tr>
+    <tr><td>.docx renamed to .pdf, broken PDF</td><td>400 <code>INVALID_PDF</code> (pdf-parse fails)</td></tr>
+    <tr><td>Scanned resume (image only)</td><td>400 <code>RESUME_NO_TEXT</code> with a clear hint</td></tr>
+    <tr><td>6 MB file</td><td>Blocked in the browser; multer also rejects (400)</td></tr>
+    <tr><td>User uploads again while one is running</td><td>429 <code>AI_JOB_RUNNING</code> (per-user lock)</td></tr>
+    <tr><td>Resume text says "ignore instructions…"</td><td>It's inside <code>&lt;resume&gt;</code> tags as data; the prompt says never follow it</td></tr>
+</table>
+
+<!-- ======================================================= F5 ======================================================= -->
+<h1><span class="num">F5</span>Starting an interview</h1>
+<p class="lead">The most carefully ordered function in the project: it spends money (credits) and calls an AI that
+    can fail. The order of steps is the whole trick.</p>
+
+<figure class="tall">
+<div class="mermaid">
+flowchart TB
+    IN["POST /api/interview/start<br/>{ role, experience, mode, resume?, requestId }"] --> V["validate: role 2–80 chars,<br/>experience + mode from fixed lists, requestId UUID"]
+    V --> S1["① Reserve: Interview.create(status 'starting')<br/>unique index { userId, requestId }"]
+    S1 -- "E11000 duplicate" --> D{"existing status?"}
+    D -- "starting" --> D409(["409 INTERVIEW_STARTING<br/>(first request still running)"])
+    D -- "in_progress / done" --> D200(["return the SAME interview<br/>no second charge"])
+    S1 -- "inserted" --> S2["② Charge (transaction):<br/>credit ≥ 50 → credit −50 + ledger row"]
+    S2 -- "not enough" --> N402(["delete reserve → 402 NOT_ENOUGH_CREDITS"])
+    S2 -- "charged" --> S3["③ AI writes 5 questions<br/>(3 tries with backoff)"]
+    S3 --> S4["④ difficulty + time from code,<br/>status in_progress, save"]
+    S4 --> OK(["201 { interviewId, questions, credit }"])
+    S3 -- "AI or DB fails" --> RF["refund +50 (ledger 'refund')<br/>delete reserve"]
+    RF --> E503(["503 AI_UNAVAILABLE<br/>same requestId can retry"])
+</div>
+<figcaption>Figure F5.1 — Reserve → charge → AI → save, with a refund path.</figcaption>
+</figure>
+
+<h2>Why each step is where it is</h2>
+<ul>
+    <li><b>Reserve first:</b> a double-click sends two requests with the <i>same</i> <code>requestId</code>. Only
+        one insert can succeed (unique index), so the second never reaches the charge step.</li>
+    <li><b>Charge before AI:</b> don't spend AI money for a user who can't pay.</li>
+    <li><b>Atomic charge:</b> <code>{ credit: { $gte: 50 } }</code> + <code>$inc: -50</code> in one query; credit
+        can never go negative even with 10 parallel requests.</li>
+    <li><b>Refund on any failure after charging</b> — and delete the reserve so "Try again" works.</li>
+    <li><b>The browser keeps the same requestId</b> if the network failed (no answer from server) or the server
+        said <code>INTERVIEW_STARTING</code>; for any other server answer it makes a new one.</li>
+</ul>
+
+<span class="file">server/src/modules/credit/credit.service.js</span>
+<pre><code><span class="k">export const</span> chargeCredits = <span class="k">async</span> (userId, amount, { interviewId } = {}) => {
+    <span class="k">const</span> user = <span class="k">await</span> mongoose.connection.transaction(<span class="k">async</span> (session) => {
+        <span class="k">const</span> user = <span class="k">await</span> User.findOneAndUpdate(
+            { _id: userId, credit: { $gte: amount } },  <span class="c">// check ...</span>
+            { $inc: { credit: -amount } },               <span class="c">// ... and subtract, in ONE operation</span>
+            { returnDocument: <span class="s">"after"</span>, session },
+        );
+        <span class="k">if</span> (!user) <span class="k">return null</span>;
+        <span class="k">await</span> Transaction.create([{ userId, type: <span class="s">"interview"</span>, amount: -amount, balanceAfter: user.credit, interviewId }], { session });
+        <span class="k">return</span> user;
+    });
+    <span class="k">if</span> (user) <span class="k">await</span> clearCache(cacheKeys.user(userId)); <span class="c">// after commit</span>
+    <span class="k">return</span> user;
+};</code></pre>
+
+<h2>Questions are designed for speaking</h2>
+<p>The questions prompt says: exactly 5, in the order easy, easy, medium, medium, hard; each answerable <b>out
+    loud</b> in its time (no code writing); 1–2 sentences; match the experience level; if a resume is given, base at
+    least 2 questions on the candidate's own projects or skills. The AI returns <b>only the text</b>; the code adds
+    <code>difficulty</code> and <code>timeLimitSec</code> (60/90/120) from <code>QUESTION_PLAN</code>.</p>
+
+<div class="box bug"><span class="label">Crash in the middle?</span>
+    <p>If the server dies after charging but before refunding, the interview stays in <code>starting</code>. The
+        cleanup job (every 60 s) finds <code>starting</code> rows older than 10 minutes, refunds them <b>only if
+        the ledger shows a charge and no refund</b>, then deletes them. Running cleanup twice can't refund twice.</p>
+</div>
+<div class="box say"><span class="label">Say it in an interview</span>
+    <p>"Start is idempotent: the client sends a UUID and a unique index on userId + requestId makes a duplicate
+        request return the first interview. Credits are charged with a conditional atomic update inside a MongoDB
+        transaction that also writes a ledger row. If the AI fails after charging, I refund and delete the reserve;
+        a cleanup job covers crashes. A test fires 10 parallel starts with credit for one — exactly one succeeds."</p>
+</div>
+
+<!-- ======================================================= F6 ======================================================= -->
+<h1><span class="num">F6</span>Voice: speaking and listening</h1>
+<p class="lead">Voice is <b>hybrid</b>. If the browser can do it well (Chrome, Edge, Safari), the free Web Speech API
+    does it in the browser. If not (Firefox, Brave, Opera…), the browser records / plays audio and our server asks
+    <b>Groq</b>: <b>Whisper</b> turns speech into text and <b>Orpheus</b> turns text into a natural voice. Two hooks
+    hide this — the interview components never know which path ran.</p>
+
+<figure>
+<div class="mermaid">
+flowchart TB
+    Q["Question text"] --> V{"Natural browser voice?<br/>(Google / Microsoft / Samantha)"}
+    V -- "yes: Chrome, Edge, Safari" --> SS["speechSynthesis<br/>free, instant"]
+    V -- "no: only eSpeak<br/>Linux Firefox / Brave" --> TTS["POST /api/tts<br/>(one per sentence)<br/>Groq Orpheus: wav audio"]
+    TTS -. "fails" .-> SS
+    M["User speaks"] --> R{"Speech API works?"}
+    R -- "yes: Chrome, Edge, Safari" --> SR["SpeechRecognition<br/>live text while speaking"]
+    R -- "no / service error<br/>Firefox, Brave, Opera" --> MR["MediaRecorder records<br/>on mic off / Submit:<br/>POST /api/transcribe<br/>Groq Whisper: text"]
+    SR --> A["Answer box"]
+    MR --> A
+</div>
+<figcaption>Figure F6.1 — Browser first (free), server only where the browser can't do it.</figcaption>
+</figure>
+
+<div class="grid2">
+<div class="card">
+<h4><code>useSpeechSynthesis(gender)</code> — AI speaks</h4>
+<ul class="small">
+    <li><code>speak(text)</code> returns a Promise that resolves when speech ends (or fails — the interview must
+        never get stuck).</li>
+    <li>Picks the best English voice by <b>score</b>: Google/Microsoft/Natural +4, robotic eSpeak variants (name
+        contains "+") −4, gender match +2, en-US/GB/IN +1.</li>
+    <li><code>isNaturalVoice(best)</code> false → <b>server voice</b>: every sentence is requested in parallel
+        from <code>/api/tts</code>, played one after another (sentence 2 downloads while 1 plays). Blob URLs are cached,
+        so "Repeat question" costs no new request. Any failure → the rest is spoken by the browser voice.</li>
+    <li>Waits up to 1 s for <code>voiceschanged</code> — voices load late, and an empty list must not mean "no
+        good voice".</li>
+    <li>Splits text into sentences (Chrome's Google voices stop after ~15 s), safety timeout for a missing
+        <code>onend</code>, and a run counter so <code>cancel()</code> stops an older <code>speak()</code>.</li>
+</ul>
+</div>
+<div class="card">
+<h4><code>useSpeechRecognition(onFinalText)</code> — user speaks</h4>
+<ul class="small">
+    <li><b>Browser path:</b> <code>continuous</code> + <code>interimResults</code> (grey live text),
+        <code>lang = "en-IN"</code>, restart when Chrome stops on silence.</li>
+    <li><b>Recorder path:</b> <code>MediaRecorder</code> (webm / ogg / mp4 — whatever the browser supports),
+        on stop → <code>/api/transcribe</code> → text added. Silent recordings are <b>not sent</b> (an
+        <code>AnalyserNode</code> watches the volume) because Whisper invents "Thank you." on silence.</li>
+    <li>Auto-switch: a <code>network</code> / <code>service-not-allowed</code> error (Opera, Vivaldi, Linux
+        Chromium, Safari with Siri off) flips to the recorder and is remembered until reload.</li>
+    <li>Both paths: <code>stop()</code> returns a Promise that waits for the last text, so it reaches the answer
+        before submit. Mic denied → "please type".</li>
+</ul>
+</div>
+</div>
+
+<h2>Files</h2>
+<table>
+    <tr><th style="width:46%">File</th><th>Job</th></tr>
+    <tr><td><code>client/src/hooks/useSpeechSynthesis.js</code></td><td>voice scoring, browser vs server voice, audio cache</td></tr>
+    <tr><td><code>client/src/hooks/useSpeechRecognition.js</code></td><td>browser hook + recorder hook, one shared interface (<code>live</code>, <code>transcribing</code>)</td></tr>
+    <tr><td><code>client/src/api/tts.api.js</code>, <code>transcribe.api.js</code></td><td>upload audio / download wav (<code>responseType: "blob"</code>)</td></tr>
+    <tr><td><code>server/src/modules/tts/</code>, <code>modules/transcribe/</code></td><td>routes: <code>isAuth → limiter → validate / multer</code>; 503 <code>VOICE_UNAVAILABLE</code> on Groq errors</td></tr>
+    <tr><td><code>server/src/lib/ai/voice.js</code></td><td>Groq calls: <code>transcribeAudio</code> (Whisper, multipart) and <code>textToSpeech</code> (Orpheus, wav bytes)</td></tr>
+</table>
+
+<span class="file">client/src/hooks/useSpeechSynthesis.js (core of speak)</span>
+<pre><code><span class="k">const</span> voice = pickVoice(<span class="k">await</span> loadVoices(), gender);
+<span class="k">if</span> (isNaturalVoice(voice)) <span class="k">await</span> speakWithBrowser(parts, voice);   <span class="c">// free, instant</span>
+<span class="k">else await</span> speakWithServer(parts, voice, isStale);              <span class="c">// Groq Orpheus</span>
+
+<span class="c">// server voice: ask for all sentences at once, play in order</span>
+<span class="k">const</span> urls = parts.map((part) => getSpeechUrl(part, gender));   <span class="c">// cached Promise&lt;blob URL&gt;</span>
+<span class="k">for</span> (<span class="k">let</span> i = 0; i &lt; parts.length; i++) {
+    <span class="k">try</span> { <span class="k">await</span> playAudio(audio, <span class="k">await</span> urls[i]); }
+    <span class="k">catch</span> { <span class="k">await</span> speakWithBrowser(parts.slice(i), voice); <span class="k">return</span>; }  <span class="c">// never get stuck</span>
+}</code></pre>
+
+<span class="file">server/src/modules/tts/tts.controller.js</span>
+<pre><code><span class="c">// not JSON — raw audio bytes (base64 in JSON would be 33% bigger). Errors are still JSON.</span>
+<span class="k">export const</span> textToSpeech = <span class="k">async</span> (req, res) => {
+    <span class="k">const</span> audio = <span class="k">await</span> speak(req.body.text, req.body.gender);
+    <span class="k">return</span> res.type(<span class="s">"audio/wav"</span>).send(audio);
+};</code></pre>
+
+<div class="box bug"><span class="label">Real bug: "voice is robotic and my speech isn't written"</span>
+    <p>On the live site the voice sounded weird and speech wasn't recognised. The console list of voices showed only
+        <b>eSpeak</b> voices → the user was on <b>Firefox on Linux</b>, which has no speech recognition and only
+        robotic voices. In <b>Brave</b> the API exists but Brave blocks Google's speech service, so the mic shows
+        "Listening" and writes nothing. <b>First fix:</b> score voices, speak in sentences, Brave = "please type".
+        <b>Real fix:</b> the browser can't do better, so the server does it — Whisper for listening, Orpheus for
+        speaking — only in those browsers, so Chrome users still cost nothing.</p>
+</div>
+
+<table>
+    <tr><th style="width:24%">Browser</th><th>Speaking (TTS)</th><th>Listening (STT)</th></tr>
+    <tr><td>Chrome / Edge</td><td>browser — natural Google / Microsoft voices</td><td>browser — live text</td></tr>
+    <tr><td>Safari</td><td>browser — Samantha / Daniel</td><td>browser (Siri off → recorder)</td></tr>
+    <tr><td>Firefox / Brave (Linux)</td><td><b>server</b> — Groq Orpheus (hannah / troy)</td><td><b>server</b> — recorder + Groq Whisper, text after mic off</td></tr>
+    <tr><td>Opera / Vivaldi</td><td>depends on installed voices</td><td>speech service fails → auto-switch to recorder</td></tr>
+</table>
+
+<div class="box warn"><span class="label">Careful</span>
+    <ul class="small">
+        <li><b>Cost &amp; limits:</b> Groq free tier limits audio too, so separate limiters: <code>voiceLimiter</code>
+            20/min and <code>ttsLimiter</code> 40/min per user — mic on/off or Repeat doesn't eat the AI answer limit.</li>
+        <li><b>Privacy:</b> audio is held in RAM (multer memory) and forgotten — never saved.</li>
+        <li><b>Orpheus terms:</b> must be accepted once in the Groq console, otherwise every call is 400
+            <code>model_terms_required</code> (and the browser voice is used).</li>
+        <li><b>Autoplay:</b> <code>audio.play()</code> works because the user already clicked "Start"; if a browser
+            blocks it, play rejects → browser voice.</li>
+    </ul>
+</div>
+
+<h2>How to test</h2>
+<ul class="small">
+    <li>Firefox / Brave: the question should sound human; DevTools → Network shows <code>POST /api/tts</code> per
+        sentence. Speak, press Mic off → "Converting your voice to text…" → text appears.</li>
+    <li>Chrome: no <code>/api/tts</code> or <code>/api/transcribe</code> calls at all.</li>
+    <li>Tests: <code>server/test/tts.test.js</code>, <code>transcribe.test.js</code> (Groq mocked);
+        client hook tests fake <code>MediaRecorder</code> and <code>HTMLMediaElement.play</code>.</li>
+</ul>
+
+<div class="box say"><span class="label">Say it in an interview</span>
+    <p>"Voice is browser-first: the Web Speech API is free and has zero server load, but Firefox has no speech
+        recognition and Linux browsers only have robotic voices. So I detect capability — not the browser name —
+        and fall back to the server: MediaRecorder plus Groq Whisper for listening, Groq Orpheus for speaking. Both
+        hooks keep the same Promise-based API, so the interview flow just <code>await</code>s
+        <code>speak()</code> and <code>stop()</code> and never knows which path ran."</p>
+</div>
+
+<!-- ======================================================= F7 ======================================================= -->
+<h1><span class="num">F7</span>The live interview round</h1>
+<p class="lead"><code>Step2interview</code> shows the avatar and owns the "finish" logic.
+    <code>QuestionRound</code> runs one question. The parent renders it with <code>key={index}</code>, so every new
+    question is a brand-new component and all its state resets automatically.</p>
+
+<figure>
+<div class="mermaid">
+stateDiagram-v2
+    direction TB
+    [*] --> speaking: mount → speak("Question N. …")
+    speaking --> answering: speech ends → start timer + mic
+    speaking --> submitting: Skip
+    answering --> speaking: Repeat question
+    answering --> submitting: Submit, or timer reaches 0
+    submitting --> error: network / 503
+    error --> submitting: Submit again (text kept)
+    submitting --> [*]: answerEvaluated → next question
+</div>
+<figcaption>Figure F7.1 — The phases of one QuestionRound.</figcaption>
+</figure>
+
+<h2>Things that make it robust</h2>
+<table>
+    <tr><th style="width:32%">Problem</th><th>Solution</th></tr>
+    <tr><td>Timer callback / mic chunk use an old value of <code>answer</code> (stale closure)</td><td>Values are mirrored in refs (<code>answerRef</code>, <code>phaseRef</code>); async code reads the ref.</td></tr>
+    <tr><td>Tab in the background slows <code>setInterval</code></td><td><code>useCountdown</code> stores the end time and computes <code>endAt − Date.now()</code> every 250 ms.</td></tr>
+    <tr><td>Client could lie about time taken</td><td>Server caps <code>timeTakenSec</code> at the question's limit.</td></tr>
+    <tr><td>Page refresh mid-interview (50 credits already spent)</td><td><code>sessionStorage</code> keeps <code>{ interviewId, avatar }</code>. On reload, <code>GET /api/interview/:id</code> → <code>interviewRestored</code> → continue at the first unscored question.</td></tr>
+    <tr><td>Browsers block audio without a user click</td><td>After a restore, <code>resumed: true</code> shows a "Continue" button first.</td></tr>
+    <tr><td>Submit succeeded on the server but the response was lost</td><td>Retry gets <code>409 ALREADY_ANSWERED</code> → the client reads the saved score with <code>GET /:id</code> and moves on.</td></tr>
+    <tr><td>React StrictMode runs effects twice in dev</td><td>The finish request is stored per attempt in a ref, so the second effect run reuses the same promise.</td></tr>
+    <tr><td>Accidentally closing the tab</td><td><code>beforeunload</code> → browser asks "Are you sure?".</td></tr>
+</table>
+
+<span class="file">client/src/components/interview/QuestionRound.jsx</span>
+<pre><code><span class="k">const</span> askQuestion = <span class="k">async</span> () => {
+    <span class="k">await</span> speak(<span class="s">`Question ${index + 1}. ${question.question}`</span>);
+    <span class="k">if</span> (phaseRef.current !== <span class="s">"speaking"</span>) <span class="k">return</span>; <span class="c">// skipped or unmounted meanwhile</span>
+    changePhase(<span class="s">"answering"</span>);
+    timer.start(question.timeLimitSec);
+    mic.start();
+};</code></pre>
+
+<div class="box warn"><span class="label">Known gap</span>
+    <p>When all answers are in, <code>Step2interview</code> calls finish and auto-retries every 3 s on
+        <code>INTERVIEW_FINISHING</code> / <code>ANSWER_BEING_EVALUATED</code> — with no upper limit. If the worker is
+        down, the spinner never stops. A cap (~3 min) + Try again button is planned.</p>
+</div>
+
+<!-- ======================================================= F8 ======================================================= -->
+<h1><span class="num">F8</span>Answer evaluation</h1>
+<p class="lead"><code>POST /api/interview/:id/answer { questionIndex, answer, timeTakenSec }</code> → 4 scores
+    (0–10) and 2–3 sentences of feedback. This one runs inside the request because the user is waiting for it.</p>
+
+<figure>
+<div class="mermaid">
+flowchart TB
+    A["① Claim (one atomic query)<br/>_id + userId + status in_progress<br/>+ question exists + answer NOT a string<br/>→ set answer, answeredAt"]
+    A -- "no match" --> W["explainAnswerConflict<br/>404 / 409 NOT_ACTIVE / 400 / 409 ALREADY_ANSWERED"]
+    A -- "claimed" --> E{"answer empty?"}
+    E -- yes --> Z["all scores 0 + fixed feedback<br/>(no AI cost)"]
+    E -- no --> AI["② evaluationPrompt → LLM<br/>zod: 4 integer scores 0–10 + feedback"]
+    AI -- fails --> U["undo claim (answer = null)<br/>503 AI_UNAVAILABLE"]
+    AI --> S["③ save scores, feedback,<br/>timeTaken (capped at limit)"]
+    Z --> S
+    S --> R(["200 { questionIndex, scores, feedback }"])
+</div>
+<figcaption>Figure F8.1 — Claim first, then the expensive work, then save.</figcaption>
+</figure>
+
+<h2>The claim query</h2>
+<span class="file">server/src/modules/interview/interview.service.js</span>
+<pre><code><span class="k">const</span> path = <span class="s">`questions.${questionIndex}`</span>;
+<span class="k">const</span> interview = <span class="k">await</span> Interview.findOneAndUpdate(
+    {
+        _id: interviewId,
+        userId,                                       <span class="c">// ownership check</span>
+        status: <span class="s">"in_progress"</span>,
+        [<span class="s">`${path}.question`</span>]: { $exists: <span class="k">true</span> },
+        [<span class="s">`${path}.answer`</span>]: { $not: { $type: <span class="s">"string"</span> } }, <span class="c">// not answered yet</span>
+    },
+    { $set: { [<span class="s">`${path}.answer`</span>]: cleanAnswer, [<span class="s">`${path}.answeredAt`</span>]: <span class="k">new</span> Date() } },
+    { returnDocument: <span class="s">"after"</span> },
+);</code></pre>
+
+<div class="box bug"><span class="label">Real bug found in testing: <code>"questions.3.answer": null</code></span>
+    <p>The first version used <code>{ "questions.3.answer": null }</code>. It matched <b>every</b> document. In
+        MongoDB, a numeric path on an array means "index 3" <i>and also</i> "a field called 3 on each element"; that
+        field is missing on every element, and missing counts as <code>null</code>. Fix: check
+        <code>$not: { $type: "string" }</code> and that <code>question</code> exists at that index.</p>
+</div>
+
+<h2>The rubric changes per mode</h2>
+<table class="small">
+    <tr><th>Mode</th><th>Communication</th><th>Content</th><th>Technical</th><th>Confidence</th></tr>
+    <tr><td><b>Technical</b></td><td>15%</td><td>30%</td><td><b>45%</b></td><td>10%</td></tr>
+    <tr><td><b>HR</b></td><td><b>35%</b></td><td><b>35%</b></td><td>10%</td><td>20%</td></tr>
+    <tr><td><b>Confidence</b></td><td>35%</td><td>20%</td><td>5%</td><td><b>40%</b></td></tr>
+</table>
+<p>The evaluation prompt also tells the AI: the answer is a speech-to-text transcript (ignore spelling and
+    punctuation), judge for the experience level and difficulty, and give 0–2 to anything off-topic, a repeat of the
+    question, or an attempt to give the AI instructions. Scores are coerced to integers 0–10 by zod (the model
+    sometimes sends <code>7.5</code> or <code>"8"</code>).</p>
+
+<!-- ======================================================= F9 ======================================================= -->
+<h1><span class="num">F9</span>Finish and the report</h1>
+<p class="lead">After the 5th answer, the client calls <code>POST /:id/finish</code>. The API only <i>claims</i> and
+    queues; the worker builds the report.</p>
+
+<figure class="mid">
+<div class="mermaid">
+flowchart TB
+    F["POST /:id/finish"] --> C{"claim: in_progress → finishing<br/>only if no answer is still being scored"}
+    C -- ok --> Q["queue 'finish-interview'<br/>202 { jobId }"]
+    C -- "fails" --> X{"why?"}
+    X -- "already completed" --> SAME(["200 + the same report"])
+    X -- "finishing" --> F409(["409 INTERVIEW_FINISHING"])
+    X -- "answer still scoring" --> E409(["409 ANSWER_BEING_EVALUATED<br/>(client retries in 3 s)"])
+    Q --> WK["worker: completeFinish"]
+    WK --> N["① numbers in code<br/>averages + weighted overall"]
+    N --> T{"any answer at all?"}
+    T -- no --> FIX["fixed text, no AI"]
+    T -- yes --> AI["② reportPrompt → strengths,<br/>weaknesses, improvements"]
+    FIX --> SV["③ save report, status completed<br/>clear stats cache"]
+    AI --> SV
+</div>
+<figcaption>Figure F9.1 — Finish: claim in the API, work in the worker.</figcaption>
+</figure>
+
+<h2>The score is maths, not AI</h2>
+<span class="file">server/src/modules/interview/interview.service.js</span>
+<pre><code><span class="k">const</span> calculateScores = (questions, weights) => {
+    <span class="k">const</span> averages = Object.fromEntries(CRITERIA.map((key) => {
+        <span class="k">const</span> total = questions.reduce((sum, q) => sum + (q.scores?.[key] ?? 0), 0); <span class="c">// unanswered = 0</span>
+        <span class="k">return</span> [key, Math.round((total / questions.length) * 10) / 10];        <span class="c">// e.g. 6.4</span>
+    }));
+    <span class="c">// weighted average (0–10) × 10 → 0–100</span>
+    <span class="k">const</span> overallScore = Math.round(CRITERIA.reduce((sum, key) => sum + averages[key] * weights[key], 0) * 10);
+    <span class="k">return</span> { averages, overallScore };
+};</code></pre>
+
+<div class="box tip"><span class="label">Worked example (technical mode)</span>
+    <p>Averages: communication 6.2, content 6.4, technical 6.6, confidence 6.8.<br />
+        Weighted: 6.2×0.15 + 6.4×0.30 + 6.6×0.45 + 6.8×0.10 = 0.93 + 1.92 + 2.97 + 0.68 = 6.50 → ×10 = <b>65</b>.
+        This exact case was verified by hand during development.</p>
+</div>
+
+<h2>Retry behaviour of the job</h2>
+<ul>
+    <li>The job has 3 attempts (backoff 2 s, 4 s). Between attempts the status stays <code>finishing</code>.</li>
+    <li>Only the <b>last</b> failed attempt puts the interview back to <code>in_progress</code>, so the user can
+        press Finish again.</li>
+    <li>If the job is re-run after a crash and the interview is already <code>completed</code>, it returns at once
+        (idempotent). If the status is something else, it throws <code>UnrecoverableError</code> — no point
+        retrying.</li>
+    <li>The save uses <code>{ status: "finishing" }</code> in its filter, so it can't overwrite an interview that
+        moved to another state.</li>
+</ul>
+
+<!-- ======================================================= F10 ======================================================= -->
+<h1><span class="num">F10</span>Report page and PDF export</h1>
+<p class="lead"><code>/report/:id</code> shows the result. The PDF is generated <b>in the browser</b> — zero server
+    load.</p>
+
+<div class="grid2">
+<div class="card">
+<h4>Report page (<code>Interviewreport</code> + <code>Step3report</code>)</h4>
+<ul class="small">
+    <li>Right after finish, the interview is passed through router <code>state</code> (no extra request). On a
+        refresh, it is loaded with <code>GET /api/interview/:id</code>.</li>
+    <li>Animated score ring (/100), 4 skill bars, strengths / weaknesses / improvements, and an accordion with every
+        question, answer, score and feedback.</li>
+    <li>Skeleton while loading; "not found" and "not finished" states.</li>
+</ul>
+</div>
+<div class="card">
+<h4>PDF (<code>utils/reportPdf.js</code>)</h4>
+<ul class="small">
+    <li><code>jspdf</code> + <code>jspdf-autotable</code> are ~400 kB, so they are <b>dynamically imported</b>
+        only when "Download PDF" is clicked.</li>
+    <li>Header with role and coloured score, skills table, lists, one table per question, page numbers.</li>
+    <li>jsPDF's built-in fonts only know Latin-1; AI text contains ‑ ’ “ … → replaced with simple characters,
+        anything else removed.</li>
+</ul>
+</div>
+</div>
+
+<span class="file">client/src/utils/reportPdf.js</span>
+<pre><code><span class="k">export const</span> downloadReportPdf = <span class="k">async</span> (interview) => {
+    <span class="c">// separate chunks, downloaded only now</span>
+    <span class="k">const</span> [{ jsPDF }, { autoTable }] = <span class="k">await</span> Promise.all([import(<span class="s">"jspdf"</span>), import(<span class="s">"jspdf-autotable"</span>)]);
+    <span class="k">const</span> doc = <span class="k">new</span> jsPDF({ unit: <span class="s">"mm"</span>, format: <span class="s">"a4"</span> });
+    ...
+};</code></pre>
+<div class="box why"><span class="label">Why dynamic import matters</span>
+    <p>Most users never click Download. A static import would make every report page load 400 kB more JavaScript.
+        With <code>import()</code>, Vite splits it into its own file that is fetched on demand.</p>
+</div>
+
+<!-- ======================================================= F11 ======================================================= -->
+<h1><span class="num">F11</span>History and analytics</h1>
+<p class="lead"><code>/history</code> lists past interviews (9 per page, mode tabs, "Load more") and shows
+    analytics on top: KPI tiles, a score-trend chart, skill bars and the weakest skill.</p>
+
+<h2>History: fast pagination</h2>
+<span class="file">server/src/modules/interview/interview.service.js</span>
+<pre><code><span class="k">const</span> HISTORY_FIELDS = <span class="s">"role experience mode status creditsUsed report.overallScore createdAt completedAt"</span>;
+
+<span class="k">export const</span> getHistory = <span class="k">async</span> (userId, { page, limit, mode }) => {
+    <span class="k">const</span> filter = { userId, status: { $ne: <span class="s">"starting"</span> } };  <span class="c">// a reserve is not a real interview</span>
+    <span class="k">if</span> (mode) filter.mode = mode;
+    <span class="k">const</span> [items, total] = <span class="k">await</span> Promise.all([                <span class="c">// both queries in parallel</span>
+        Interview.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit)
+            .select(HISTORY_FIELDS).lean(),                       <span class="c">// light fields, plain objects</span>
+        Interview.countDocuments(filter),
+    ]);
+    <span class="k">return</span> { items, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
+};</code></pre>
+<ul>
+    <li><b>Index</b> <code>{ userId: 1, createdAt: -1 }</code> serves both the filter and the sort.</li>
+    <li><b>Projection</b>: no questions/resume (the heaviest fields) in the list.</li>
+    <li><b><code>.lean()</code></b>: plain objects instead of Mongoose documents — faster, less memory.</li>
+    <li><b>limit ≤ 50</b> (zod), so nobody can ask for the whole collection.</li>
+</ul>
+
+<h2>Analytics: one aggregation with <code>$facet</code></h2>
+<figure>
+<div class="mermaid">
+flowchart TB
+    M["$match userId (as ObjectId) + status completed"] --> F["$facet — three pipelines on the same data"]
+    F --> S1["summary<br/>$group: count, avg, best,<br/>avg of each skill → $round 1"]
+    F --> S2["byMode<br/>$group by mode: count, avg, best"]
+    F --> S3["trend<br/>$sort completedAt desc · $limit 20"]
+    S1 --> J["code: reverse trend, latest score,<br/>change vs previous"]
+    S2 --> J
+    S3 --> J
+    J --> C(["cached in Redis 10 min<br/>cleared when an interview completes"])
+</div>
+<figcaption>Figure F11.1 — Summary, per-mode stats and trend in one database round trip.</figcaption>
+</figure>
+
+<div class="box bug"><span class="label">Real gotcha</span>
+    <p><code>Interview.find({ userId: "abc..." })</code> works because Mongoose casts the string to an ObjectId.
+        <code>aggregate()</code> does <b>not</b> cast — the <code>$match</code> silently matched 0 documents until
+        <code>new mongoose.Types.ObjectId(userId)</code> was used.</p>
+</div>
+<p><b>Frontend:</b> the chart (recharts) is in its own lazy chunk (<code>ScoreTrendChart.jsx</code>); analytics are
+    hidden for users with 0 completed interviews and hidden silently if the stats call fails, so the history list
+    still works.</p>
+
+<!-- ======================================================= F12 ======================================================= -->
+<h1><span class="num">F12</span>Credits ledger</h1>
+<p class="lead"><code>User.credit</code> is the balance. The <code>Transaction</code> collection is the
+    <b>passbook</b>: one row for every + or −, with the balance after it. It answers "where did my credits go?".</p>
+
+<table>
+    <tr><th style="width:20%">Type</th><th style="width:12%">Amount</th><th>Written by</th></tr>
+    <tr><td><code>signup_bonus</code></td><td>+500</td><td>Google sign-up or email register (unique per user)</td></tr>
+    <tr><td><code>interview</code></td><td>−50</td><td><code>chargeCredits</code> at Start</td></tr>
+    <tr><td><code>refund</code></td><td>+50</td><td>Start failed after charging, or cleanup of a stuck start</td></tr>
+    <tr><td><code>purchase</code></td><td>+500 / 1500 / 4000</td><td><code>fulfillOrder</code> after payment (unique <code>paymentId</code>)</td></tr>
+</table>
+
+<div class="box why"><span class="label">One rule: balance and ledger change together</span>
+    <p>Every credit change goes through <code>chargeCredits</code> or <code>addCredits</code>, which update the user
+        <b>and</b> insert the ledger row in one MongoDB transaction. A crash in between can't leave a balance without
+        its row. The Redis cache for the user is cleared <b>after</b> the commit — clearing it inside the
+        transaction could let another request re-cache the old balance before the commit.</p>
+</div>
+<div class="box tip"><span class="label">Why transactions need Atlas / a replica set</span>
+    <p>MongoDB transactions only work on a replica set. Atlas is one. The tests use
+        <code>MongoMemoryReplSet</code> for the same reason.</p>
+</div>
+<p>The account page shows the ledger newest-first with "Load more" (<code>GET /api/credits/transactions</code>,
+    10 per page, index <code>{ userId, createdAt: -1 }</code>).</p>
+<div class="box warn"><span class="label">Known gap</span>
+    <p>Users created before the ledger existed have no row for their old credits — their balance is right, the
+        history just starts later.</p>
+</div>
+
+<!-- ======================================================= F13 ======================================================= -->
+<h1><span class="num">F13</span>Payments with Razorpay</h1>
+<p class="lead">Plans: <b>Starter</b> 500 credits ₹99 · <b>Pro</b> 1500 ₹249 · <b>Max</b> 4000 ₹599. Two
+    independent paths can confirm a payment — the browser (<i>verify</i>) and Razorpay's server (<i>webhook</i>) — and
+    both must credit exactly once.</p>
+
+<figure class="tall">
+<div class="mermaid">
+sequenceDiagram
+    participant B as Browser
+    participant A as API
+    participant R as Razorpay
+    participant M as MongoDB
+    B->>A: POST /api/payment/order { planId }
+    Note over A: price from the plan (server decides)
+    A->>R: orders.create(amount in paise)
+    R-->>A: order_id
+    A->>M: Payment { status created, credits, amount }
+    A-->>B: { orderId, amount, keyId }
+    B->>R: checkout popup, user pays
+    R-->>B: order_id, payment_id, signature
+    par browser path
+        B->>A: POST /verify { 3 fields }
+        Note over A: HMAC_SHA256(order|payment, KEY_SECRET) == signature?
+        A->>M: fulfillOrder (transaction)
+    and server path
+        R->>A: POST /webhook (raw body, x-razorpay-signature)
+        Note over A: HMAC of raw body with WEBHOOK_SECRET · amount matches?
+        A->>M: fulfillOrder (transaction)
+    end
+    Note over A,M: fulfillOrder: claim status ≠ paid → paid,<br/>+credits, ledger row (unique paymentId).<br/>The loser sees "already processed".
+
+</div>
+<figcaption>Figure F13.1 — Order, checkout, then verify and webhook racing safely.</figcaption>
+</figure>
+
+<span class="file">server/src/modules/payment/payment.service.js (simplified)</span>
+<pre><code><span class="k">const</span> fulfillOrder = (orderId, paymentId) => mongoose.connection.transaction(<span class="k">async</span> (session) => {
+    <span class="k">const</span> payment = <span class="k">await</span> Payment.findOneAndUpdate(
+        { razorpayOrderId: orderId, status: { $ne: <span class="s">"paid"</span> } },          <span class="c">// claim</span>
+        { $set: { status: <span class="s">"paid"</span>, razorpayPaymentId: paymentId, paidAt: <span class="k">new</span> Date() } },
+        { returnDocument: <span class="s">"after"</span>, session },
+    );
+    <span class="k">if</span> (!payment) <span class="k">return</span> { alreadyProcessed: <span class="k">true</span> };
+    <span class="k">const</span> user = <span class="k">await</span> User.findOneAndUpdate({ _id: payment.userId }, { $inc: { credit: payment.credits } }, { returnDocument: <span class="s">"after"</span>, session });
+    <span class="k">await</span> Transaction.create([{ userId: payment.userId, type: <span class="s">"purchase"</span>, amount: payment.credits, balanceAfter: user.credit, paymentId }], { session });
+    <span class="k">return</span> { alreadyProcessed: <span class="k">false</span>, credit: user.credit };
+});</code></pre>
+
+<h2>Security checklist</h2>
+<ul>
+    <li><b>Server sets the price</b> — the client sends only <code>planId</code> (zod enum). Otherwise someone could
+        buy 4000 credits for ₹1.</li>
+    <li><b>HMAC signatures</b> with secrets only Razorpay and our server know; compared with
+        <code>crypto.timingSafeEqual</code> (a normal <code>===</code> stops at the first wrong character, which
+        leaks timing).</li>
+    <li><b>Webhook uses the raw body</b> — mounted before <code>express.json()</code>.</li>
+    <li><b>Order must belong to the user</b> on verify (else 404); webhook checks <code>amount</code> equals what we
+        asked for.</li>
+    <li><b><code>payment.failed</code></b> only marks <code>created</code> orders as failed, never a paid one.</li>
+    <li>No keys configured → payments return 503 <code>PAYMENTS_DISABLED</code>, the rest of the app works.</li>
+</ul>
+<div class="box why"><span class="label">Why the webhook matters</span>
+    <p>The user may pay and close the tab before the browser calls verify. The webhook is Razorpay's server telling
+        ours directly, so credits still arrive. Razorpay retries webhooks, which is why fulfilment must be
+        idempotent.</p>
+</div>
+
+<!-- ======================================================= F14 ======================================================= -->
+<h1><span class="num">F14</span>The AI client</h1>
+<p class="lead">One file, <code>server/src/lib/ai/openRouter.js</code>, talks to the LLM. Live we use <b>Groq</b>
+    (<code>AI_PROVIDER=groq</code>). OpenRouter is kept only as a backup — switching back is an env change
+    (<code>AI_PROVIDER=openrouter</code>), no code change.</p>
+
+<span class="file">server/src/lib/ai/openRouter.js</span>
+<pre><code><span class="c">// both APIs are OpenAI-compatible — only URL, key and model differ</span>
+<span class="k">const</span> PROVIDERS = {
+    openrouter: {
+        url: <span class="s">"https://openrouter.ai/api/v1/chat/completions"</span>,
+        apiKey: env.OPENROUTER_API_KEY,
+        models: [env.OPENROUTER_MODEL, ...env.OPENROUTER_FALLBACK_MODELS], <span class="c">// backup list</span>
+    },
+    groq: {
+        url: <span class="s">"https://api.groq.com/openai/v1/chat/completions"</span>,
+        apiKey: env.GROQ_API_KEY,
+        models: [env.GROQ_MODEL],                                          <span class="c">// one model</span>
+    },
+};
+<span class="k">const</span> { url: AI_URL, apiKey: AI_KEY, models: MODELS } = PROVIDERS[env.AI_PROVIDER];
+
+<span class="c">// request body: one model → { model }, several → { models } (OpenRouter's fallback feature)</span>
+{ ...(MODELS.length > 1 ? { models: MODELS } : { model: MODELS[0] }), messages,
+  ...(json && { response_format: { type: <span class="s">"json_object"</span> } }) }</code></pre>
+
+<h2>Robustness inside <code>askAi</code> / <code>askAiJson</code></h2>
+<table>
+    <tr><th style="width:36%">Problem seen with real models</th><th>Handling</th></tr>
+    <tr><td>Reply wrapped in <code>```json … ```</code> or with extra text</td><td><code>extractJson</code> takes from the first <code>{</code> to the last <code>}</code>.</td></tr>
+    <tr><td>HTTP 200 but an error in the body (all models busy)</td><td>Turned into a real error.</td></tr>
+    <tr><td>Empty content</td><td>Error that includes the model name and <code>finish_reason</code>.</td></tr>
+    <tr><td>Wrong shape / out-of-range numbers</td><td>zod schema; failure counts as a failed attempt.</td></tr>
+    <tr><td>Temporary failure</td><td>Default 2 retries with backoff 1 s, 2 s + random jitter (0–300 ms). Jobs pass <code>retries: 0</code> because BullMQ retries.</td></tr>
+    <tr><td>Slow provider</td><td>60 s axios timeout.</td></tr>
+</table>
+
+<div class="box tip"><span class="label">Why jitter?</span>
+    <p>If 100 users fail at the same second and all retry after exactly 1 s, they hit the provider together again.
+        A small random extra delay spreads them out.</p>
+</div>
+<div class="box bug"><span class="label">Real migration story</span>
+    <p>Reports were slow on a free OpenRouter reasoning model (~3.4 s for a tiny prompt, often busy; backups failing).
+        Switched to Groq with a provider map. The first model name tried no longer existed on Groq (404) — the fix
+        was to list the account's models and benchmark them: gpt-oss-120b 1.4 s, gpt-oss-20b 1.2 s, qwen 0.8 s →
+        chose <code>openai/gpt-oss-120b</code> for quality. Lesson: model catalogues change; verify, don't assume.</p>
+</div>
+
+<!-- ======================================================= F15 ======================================================= -->
+<h1><span class="num">F15</span>Background queue and cleanup</h1>
+<p class="lead">BullMQ on Redis. Two queues: <code>ai</code> (resume + report) and <code>maintenance</code>
+    (cleanup every 60 s).</p>
+
+<h2>Adding a job — with a per-user lock</h2>
+<span class="file">server/src/lib/queue/aiJobs.js</span>
+<pre><code><span class="k">export const</span> enqueueAiJob = <span class="k">async</span> (name, userId, data) => {
+    <span class="k">if</span> (!isRedisReady()) <span class="k">throw</span> queueDown();                          <span class="c">// 503</span>
+    <span class="k">const</span> jobId = randomUUID();
+    <span class="c">// NX = only if the key doesn't exist → two parallel requests: only one wins</span>
+    <span class="k">const</span> locked = <span class="k">await</span> redis.set(lockKey(userId), jobId, <span class="s">"EX"</span>, 300, <span class="s">"NX"</span>);
+    <span class="k">if</span> (!locked) <span class="k">throw new</span> AppError(429, <span class="s">"You already have an AI task running..."</span>, <span class="s">"AI_JOB_RUNNING"</span>);
+    <span class="k">const</span> reqId = getLogger().bindings?.().reqId;                      <span class="c">// logs of API + worker share an ID</span>
+    <span class="k">await</span> aiQueue.add(name, { ...data, userId: String(userId), reqId }, { jobId });
+    <span class="k">return</span> jobId;
+};
+
+<span class="c">// release only OUR lock — GET + DEL as one atomic Lua script</span>
+<span class="k">const</span> RELEASE_LOCK_SCRIPT = <span class="s">`if redis.call("GET", KEYS[1]) == ARGV[1] then return redis.call("DEL", KEYS[1]) end return 0`</span>;</code></pre>
+
+<h2>Processing a job</h2>
+<ul>
+    <li><code>processAiJob</code> finds the handler by job name, runs it inside a logger that carries
+        <code>jobId</code>, <code>reqId</code> and the attempt number.</li>
+    <li>On success: release the lock, return the result (BullMQ stores it as <code>returnvalue</code>, kept 1 h).</li>
+    <li>On failure: release the lock only on the <b>final</b> attempt. Only our own messages
+        (<code>AppError</code>) reach the user; internal errors become "Something went wrong" (the real error is
+        kept as <code>cause</code> in the logs).</li>
+    <li><code>GET /api/jobs/:id</code> maps BullMQ's many states to three: <code>pending</code>,
+        <code>completed</code> (+result), <code>failed</code> (+message). Another user's job → 404.</li>
+</ul>
+
+<h2>Cleanup job (self-healing)</h2>
+<table>
+    <tr><th style="width:30%">Finds</th><th>Does</th></tr>
+    <tr><td><code>starting</code>, not updated for 10 min (max 100 per run)</td><td>Refund if the ledger has a charge and no refund yet → then delete. Refund <b>before</b> delete: a crash in between is retried safely next minute.</td></tr>
+    <tr><td><code>finishing</code>, not updated for 15 min</td><td>Back to <code>in_progress</code>, so the user can Finish again.</td></tr>
+</table>
+<p>The schedule is created with <code>upsertJobScheduler</code>, so starting several workers still gives
+    <b>one</b> schedule, and the maintenance worker has concurrency 1.</p>
+
+<div class="box warn"><span class="label">Details that matter in production</span>
+    <ul>
+        <li>The worker needs its <b>own</b> Redis connection with <code>maxRetriesPerRequest: null</code> (it blocks
+            waiting for jobs; BullMQ requires this).</li>
+        <li>Redis must use <code>noeviction</code>, or jobs could be silently deleted when memory is full.</li>
+        <li>Graceful shutdown waits up to 25 s for running jobs; unfinished ones become "stalled" and are re-run.</li>
+    </ul>
+</div>
+
+<!-- ======================================================= F16 ======================================================= -->
+<h1><span class="num">F16</span>Redis: rate limits and cache</h1>
+
+<h2>Rate limits</h2>
+<table>
+    <tr><th>Limiter</th><th>Limit</th><th>Key</th><th>Where</th></tr>
+    <tr><td><code>globalLimiter</code></td><td>100 / min</td><td>IP</td><td>every route (after <code>/health</code>)</td></tr>
+    <tr><td><code>authLimiter</code></td><td>10 / 15 min</td><td>IP</td><td>register, login, resend, forgot, reset</td></tr>
+    <tr><td><code>aiLimiter</code></td><td>10 / min</td><td><b>userId</b></td><td>resume, start, answer, finish (after <code>isAuth</code>)</td></tr>
+    <tr><td><code>voiceLimiter</code></td><td>20 / min</td><td><b>userId</b></td><td><code>/api/transcribe</code> (Whisper)</td></tr>
+    <tr><td><code>ttsLimiter</code></td><td>40 / min</td><td><b>userId</b></td><td><code>/api/tts</code> (Orpheus, one call per sentence)</td></tr>
+</table>
+<p>Counters live in Redis (<code>rl:global:</code>, <code>rl:auth:</code>, <code>rl:ai:</code> prefixes), so every
+    server copy shares the same count and a restart doesn't reset it. The AI limiter counts per <b>user</b>, so
+    students on one college/hostel IP don't block each other.</p>
+
+<h2>Cache-aside</h2>
+<span class="file">server/src/lib/cache.js</span>
+<pre><code><span class="k">export const</span> cached = <span class="k">async</span> (key, ttlSeconds, load) => {
+    <span class="k">if</span> (!isRedisReady()) <span class="k">return</span> load();                     <span class="c">// Redis down → just use the DB</span>
+    <span class="k">try</span> {
+        <span class="k">const</span> hit = <span class="k">await</span> redis.get(key);
+        <span class="k">if</span> (hit) <span class="k">return</span> JSON.parse(hit);                      <span class="c">// HIT</span>
+    } <span class="k">catch</span> (error) { <span class="c">/* log and fall through */</span> }
+    <span class="k">const</span> value = <span class="k">await</span> load();                             <span class="c">// MISS → DB</span>
+    redis.set(key, JSON.stringify(value), <span class="s">"EX"</span>, ttlSeconds).catch(...); <span class="c">// no await: don't make the user wait</span>
+    <span class="k">return</span> value;
+};</code></pre>
+<table>
+    <tr><th>Key</th><th>TTL</th><th>Cleared when</th></tr>
+    <tr><td><code>user:&lt;id&gt;</code></td><td>60 s</td><td>credits charged/added, payment, email verified, password reset, Google login fixes an account</td></tr>
+    <tr><td><code>stats:&lt;id&gt;</code></td><td>10 min</td><td>an interview completes</td></tr>
+</table>
+
+<div class="box why"><span class="label">Fail open — and why /ready ignores Redis</span>
+    <p>If Redis goes down, limiters let requests through (<code>passOnStoreError</code>) and the cache reads
+        MongoDB. A broken helper should not take the whole app down. That's also why <code>/ready</code> reports
+        Redis but doesn't fail on it: all servers share one Redis, so failing readiness would mark <i>every</i>
+        server unhealthy at once.</p>
+</div>
+<div class="box warn"><span class="label">But Redis is required at startup</span>
+    <p>The rate-limit store loads its Lua scripts when the app starts. If Redis is missing then, the store stays
+        broken forever — so the server refuses to start without Redis (later outages are tolerated). Also only
+        one "Redis down" log line is written, not one per request.</p>
+</div>
+
+<!-- ======================================================= F17 ======================================================= -->
+<h1><span class="num">F17</span>Config, validation and errors</h1>
+
+<h2>Environment: fail fast</h2>
+<p><code>config/env.js</code> validates <code>process.env</code> with zod when the server starts. A missing or wrong
+    value prints a list and exits — much better than crashing on the first user.</p>
+<pre><code><span class="c">// a few rules from env.js</span>
+PORT: z.coerce.number().int().positive().default(8000),           <span class="c">// "8000" → 8000</span>
+JWT_SECRET: z.string().min(16),
+AI_PROVIDER: z.enum([<span class="s">"openrouter"</span>, <span class="s">"groq"</span>]).default(<span class="s">"openrouter"</span>),
+RUN_WORKER_IN_API: z.enum([<span class="s">"true"</span>, <span class="s">"false"</span>]).default(<span class="s">"false"</span>).transform((v) => v === <span class="s">"true"</span>),
+<span class="c">// .superRefine: the chosen provider's key is required; in production SMTP is required and CLIENT_URL must be https</span></code></pre>
+<div class="box bug"><span class="label">Why not z.coerce.boolean()?</span>
+    <p><code>z.coerce.boolean()</code> uses JavaScript truthiness: the string <code>"false"</code> is non-empty, so
+        it becomes <code>true</code>. The enum + transform makes "false" really false.</p>
+</div>
+
+<h2>Request validation</h2>
+<span class="file">server/src/middlewares/validate.js</span>
+<pre><code><span class="k">const</span> validate = (schemas) => (req, res, next) => {
+    <span class="k">for</span> (<span class="k">const</span> part <span class="k">of</span> [<span class="s">"body"</span>, <span class="s">"params"</span>, <span class="s">"query"</span>]) {
+        <span class="k">if</span> (!schemas[part]) <span class="k">continue</span>;
+        <span class="k">const</span> result = schemas[part].safeParse(req[part] ?? {});
+        <span class="k">if</span> (!result.success) <span class="k">throw new</span> AppError(400, <span class="c">/* "body.email: Enter a valid email; ..." */</span>);
+        <span class="c">// Express 5: req.query is a getter → replace with defineProperty</span>
+        Object.defineProperty(req, part, { value: result.data, writable: <span class="k">true</span>, enumerable: <span class="k">true</span>, configurable: <span class="k">true</span> });
+    }
+    next();
+};</code></pre>
+<p>After validation the controller gets <b>clean</b> data: trimmed, lower-cased emails, numbers instead of strings,
+    unknown fields removed. On the client, <code>getErrorMessage()</code> removes the <code>body.email: </code>
+    prefix before showing the message.</p>
+
+<h2>Errors</h2>
+<ul>
+    <li><code>AppError(status, message, code)</code> — our message is safe to show.</li>
+    <li>Any other error → 500 "Internal server error"; the real error goes to the log with the stack.</li>
+    <li>Every error response includes <code>requestId</code>.</li>
+    <li>Status codes used: 400 bad input, 401 not logged in, 402 not enough credits, 403 email not verified, 404 not
+        found / not yours, 409 conflict (already answered, finishing…), 429 limits, 502 email/payment provider, 503
+        AI/queue busy.</li>
+</ul>
+
+<!-- ======================================================= F18 ======================================================= -->
+<h1><span class="num">F18</span>Logging, monitoring, health</h1>
+
+<h2>Request IDs everywhere</h2>
+<figure>
+<div class="mermaid">
+flowchart TB
+    R["request"] --> G["requestLogger (pino-http)<br/>id = valid X-Request-Id header or new UUID<br/>echo it in the response header"]
+    G --> S["AsyncLocalStorage keeps req.log<br/>for this request's whole async chain"]
+    S --> SV["any service: getLogger().info(...)<br/>→ line includes reqId"]
+    S --> Q["enqueueAiJob copies reqId<br/>into the job data"]
+    Q --> WK["worker logger: jobId + reqId + attempt"]
+    G --> END["one line per request:<br/>method, url, status, time, userId<br/>4xx warn · 5xx error + stack"]
+</div>
+<figcaption>Figure F18.1 — One ID follows a request from the API into the background worker.</figcaption>
+</figure>
+
+<table>
+    <tr><th style="width:30%">Feature</th><th>Detail</th></tr>
+    <tr><td>pino</td><td>JSON lines in production (fast, searchable), coloured pretty lines in development.</td></tr>
+    <tr><td>Redaction</td><td>Cookie, authorization and set-cookie headers never reach the logs.</td></tr>
+    <tr><td>Quiet health checks</td><td><code>/health</code> and <code>/ready</code> are not logged (they run every few seconds).</td></tr>
+    <tr><td>Safe incoming ID</td><td>Only accepted if 1–64 chars of <code>[\w-]</code>, so nobody fills logs with a 1 MB header.</td></tr>
+    <tr><td>Sentry (optional)</td><td>Server and client; off when no DSN. Server sends only 5xx; client Sentry is a separate lazy chunk.</td></tr>
+    <tr><td><code>GET /health</code></td><td>"Process is alive" → <code>{ status: "ok" }</code>. Used by Render's health check.</td></tr>
+    <tr><td><code>GET /ready</code></td><td>"Can serve requests": checks MongoDB <code>readyState</code> first, then a ping → 200 or 503; reports Redis ok/down.</td></tr>
+</table>
+
+<div class="box bug"><span class="label">Real bug: every request got the id "undefined"</span>
+    <p><code>/^[\w-]{1,64}$/.test(undefined)</code> is <b>true</b> — <code>undefined</code> is converted to the
+        string "undefined", which matches. Requests without the header got id "undefined", setHeader then threw and
+        every request returned 500. Fix: check <code>typeof incoming === "string"</code> first.</p>
+</div>
+
+<!-- ======================================================= F19 ======================================================= -->
+<h1><span class="num">F19</span>Tests, CI and deployment</h1>
+
+<h2>How the server tests work</h2>
+<ul>
+    <li><b>Vitest + Supertest</b>: real HTTP requests against the Express <code>app</code> (no
+        <code>listen</code> needed — that's why <code>app.js</code> and <code>server.js</code> are separate).</li>
+    <li><b>MongoMemoryReplSet</b>: a temporary MongoDB in RAM, as a replica set because credits and payments use
+        transactions.</li>
+    <li><b>Redis DB 1</b>: your dev data in DB 0 is never touched; everything is wiped before each test.</li>
+    <li><b>AI and email are mocked</b> with <code>vi.mock</code>; tests never read the real <code>.env</code>.</li>
+    <li>Test files run one after another (<code>fileParallelism: false</code>) because they share one DB.</li>
+</ul>
+
+<span class="file">The race test, in words (server/test/interview.test.js)</span>
+<pre><code>user has 50 credits (enough for ONE interview)
+fire 10 POST /start requests at the same time, each with a different requestId
+expect: exactly 1 × 201 and 9 × 402
+expect: credit = 0, and exactly one "interview" ledger row</code></pre>
+
+<h2>Client tests</h2>
+<p>Testing Library + jsdom with the real Redux slices (<code>renderWithProviders</code>): the setup form (role
+    required, not enough credits, trimmed values + UUID sent, errors shown, resume chips, non-PDF refused), the
+    report page, <code>waitForJob</code> polling with fake timers, the voice picker / text splitter, and both voice
+    hooks on their server paths (fake <code>MediaRecorder</code> and <code>audio.play</code>).</p>
+
+<h2>CI</h2>
+<p><code>.github/workflows/ci.yml</code> runs on every push and PR: Node 22, a Redis 7 service container, npm cache,
+    cached MongoDB binary → Prettier check → ESLint → server tests → client tests → client build. Older runs on the
+    same branch are cancelled.</p>
+
+<h2>Deployment checklist (what actually had to be fixed to go live)</h2>
+<table class="small">
+    <tr><th style="width:38%">Problem on Render/Vercel</th><th>Fix</th></tr>
+    <tr><td>Server crashed: pino-pretty is a dev dependency</td><td>Set <code>NODE_ENV=production</code> (and <code>NODE_VERSION=22</code>).</td></tr>
+    <tr><td>Startup refused</td><td><code>CLIENT_URL</code> must be the https Vercel URL.</td></tr>
+    <tr><td>Redis unreachable</td><td><code>REDIS_URL</code> still pointed at localhost → use the Key Value internal URL.</td></tr>
+    <tr><td>API 404s through Vercel</td><td>The URL in <code>vercel.json</code> had been broken across two lines by a web editor.</td></tr>
+    <tr><td>Google login blocked</td><td>Add the Vercel domain to Firebase "Authorized domains".</td></tr>
+    <tr><td>Reports never finished</td><td><code>RUN_WORKER_IN_API=true</code> was missing (service made by hand, not from <code>render.yaml</code>).</td></tr>
+    <tr><td>Slow / busy AI</td><td>Switched to Groq (<code>AI_PROVIDER</code>, <code>GROQ_API_KEY</code>, <code>GROQ_MODEL</code>).</td></tr>
+</table>
+<div class="box say"><span class="label">Say it in an interview</span>
+    <p>"Most deployment bugs were configuration, not code. That's why the server validates its whole environment
+        with zod at startup and refuses to boot with an insecure or incomplete config — and why I'd add an alert if
+        the queue has jobs but no worker."</p>
+</div>
+
+<script src="vendor/mermaid.min.js"></script>
+<script src="render.js"></script>
+</body>
+</html>

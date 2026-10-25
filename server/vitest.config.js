@@ -20,6 +20,7 @@ export default defineConfig({
             CLIENT_URL: "http://localhost:5173",
             FIREBASE_PROJECT_ID: "test-project",
             OPENROUTER_API_KEY: "test-key-never-used",
+            GROQ_API_KEY: "test-groq-key-never-used", // voice transcription (Whisper call tests me fake hai)
             // DB 1 — local dev ka data DB 0 me hai, tests use kabhi nahi chhoote. CI apna Redis deta hai (TEST_REDIS_URL)
             REDIS_URL: process.env.TEST_REDIS_URL ?? "redis://localhost:6380/1",
             SMTP_HOST: "",

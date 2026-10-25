@@ -1,7 +1,4 @@
 // server ke interview.modes.js jaisa hi — wahan kuch badle (cost, levels) to yaha bhi badalna
-import hrImg from "../assets/HR.webp";
-import techImg from "../assets/tech.webp";
-import confidenceImg from "../assets/confi.webp";
 import maleVideo from "../assets/Videos/male-ai.mp4";
 import femaleVideo from "../assets/Videos/female-ai.mp4";
 
@@ -25,19 +22,25 @@ export const ROLE_SUGGESTIONS = [
     "Product Manager",
 ];
 
+// weights = server ke interview.modes.js jaisa hi (har criteria kitna gin'a jaata hai) — UI me "kya judge hoga" dikhane ke liye
 export const MODES = [
     {
         key: "technical",
         title: "Technical",
         desc: "Role-specific concepts, trade-offs and problem solving.",
-        image: techImg,
+        weights: { communication: 15, content: 30, technical: 45, confidence: 10 },
     },
-    { key: "hr", title: "HR", desc: "Behavioural questions — teamwork, conflict, goals.", image: hrImg },
+    {
+        key: "hr",
+        title: "HR",
+        desc: "Behavioural questions — teamwork, conflict, goals.",
+        weights: { communication: 35, content: 35, technical: 10, confidence: 20 },
+    },
     {
         key: "confidence",
         title: "Confidence",
         desc: "Introduce yourself, your projects, why hire you.",
-        image: confidenceImg,
+        weights: { communication: 35, content: 20, technical: 5, confidence: 40 },
     },
 ];
 
